@@ -8,6 +8,8 @@
    - 3.1 [Functional Requirements](#31-functional-requirements)
    - 3.2 [Non-Functional Requirements](#32-non-functional-requirements)
    - 3.3 [LLM Inference Requirements](#33-llm-inference-requirements)
+   - 3.4 [Recommendation System Requirements](#34-recommendation-system-requirements)
+   - 3.5 [Platform Dynamics Simulation Requirements](#35-platform-dynamics-simulation-requirements)
 4. [Database Schema](#4-database-schema)
 5. [Ray Client-Server Design](#5-ray-client-server-design)
 6. [LLM Integration](#6-llm-integration)
@@ -89,38 +91,49 @@ YPhotoSharing follows the client/server separation established in
 
 ### 3.1 Functional Requirements
 
-#### User Management
-- FR-1  Users have a profile with username, bio, profile picture, Big Five
-  personality traits, demographic attributes and activity level.
-- FR-2  Users can be marked as verified, private or page accounts.
-- FR-3  Users can follow/unfollow other users (directed social graph).
+#### User Management & Profile
+- FR-1  Users have a profile with username, bio, profile picture, Big Five personality traits, demographic attributes, and activity level.
+- FR-2  Users can be marked as verified, private, or page accounts.
+- FR-3  Users can perform profile management: editing profile information, changing privacy settings, managing highlights, and linking external accounts.
 
-#### Photo Content
-- FR-4  Users publish photos with a URL, LLM-generated caption, optional
-  filter, hashtags, location tag and alt text.
-- FR-5  Photos support carousel format (multiple images in one post).
-- FR-6  Photos can be soft-deleted (tombstone, no hard delete of reactions).
+#### Network & Graph Dynamics
+- FR-4  Users can follow/unfollow other users (directed social graph represented as $User_i \rightarrow User_j$).
+- FR-5  Users can accept or reject follow requests (for private accounts).
+- FR-6  Users can block, restrict, or mute other accounts to manage interactions and visibility.
 
-#### Reactions & Comments
-- FR-7  Users react to photos with one of: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY.
-- FR-8  Users leave threaded comments on photos; replies reference a parent
-  comment.
-- FR-9  @mentions inside captions and comments are persisted and queryable.
+#### Content Creation
+- FR-7  Users publish feed posts (photos) with a URL, LLM-generated caption, optional filter, hashtags, location tag, and alt text.
+- FR-8  Feed posts support carousel format (multiple images in a single post).
+- FR-9  Users can tag other users in content (establishing social edges).
+- FR-10 Feed posts support soft-deletion (tombstone, no hard delete of reactions).
+- FR-11 Content creation actions are associated with state variables: content topic, content quality, number of images, posting time, caption length, hashtag set, and tagged users.
+
+#### Content Consumption & Search
+- FR-12 Users consume content by viewing posts, browsing profiles, exploring recommendations, opening hashtag pages, and opening location pages.
+- FR-13 Users can search for other users, hashtags, or posts.
+- FR-14 The platform tracks consumption state variables: dwell time, number of viewed posts, session duration, scroll depth, and content diversity.
+
+#### Social Interactions & Engagement
+- FR-15 Users react to photos with appreciation (e.g., LIKE, LOVE, LAUGH, WOW, SAD, ANGRY).
+- FR-16 Users leave threaded comments on photos; replies reference a parent comment.
+- FR-17 @mentions inside captions and comments are persisted and queryable.
+- FR-18 Users can bookmark/save content.
+- FR-19 Users can share feed posts with other users via direct messages.
+- FR-20 The platform tracks engagement metrics including likes, comments, replies, shares, and saves.
 
 #### Stories
-- FR-10 Users post ephemeral stories (image or video) that expire after 24 h
-  of simulation time.
-- FR-11 Stories support interactive stickers: polls, questions, sliders.
-- FR-12 Story view counts are tracked per viewer.
+- FR-21 Users post ephemeral stories (image or video) that expire after 24 h of simulation time.
+- FR-22 Stories support interactive stickers: polls, questions, sliders.
+- FR-23 Story view counts are tracked per viewer.
 
 #### Feeds & Discovery
-- FR-13 A chronological home feed is served to each user based on following.
-- FR-14 An algorithmic explore/recommendation feed is served per round.
-- FR-15 Trending hashtags are computed and persisted per round.
+- FR-24 A chronological home feed is served to each user based on following.
+- FR-25 An algorithmic explore/recommendation feed is served per round.
+- FR-26 Trending hashtags are computed and persisted per round.
 
 #### Direct Messages
-- FR-16 Users can send private text messages, optionally attaching a photo.
-- FR-17 Read/unread status is tracked per message.
+- FR-27 Users can send private text messages, optionally attaching a photo or sharing a post.
+- FR-28 Read/unread status is tracked per message.
 
 ### 3.2 Non-Functional Requirements
 
@@ -147,6 +160,38 @@ YPhotoSharing follows the client/server separation established in
   alt-text descriptions and visual sentiment for photo content.
 - LLM-5  **Transparent switching** – All LLM service actors expose an identical
   Python method surface; switching backends requires only a config change.
+
+### 3.4 Recommendation System Requirements
+
+- RE-1  **Feed Ranking System**: Ranks candidate feed posts from followed and suggested accounts.
+  - *Input Signals*: Relationship strength, historical engagement, user interests, content popularity, content recency.
+  - *Predicted Outcomes*: Probability of like, comment, save, share, and expected dwell time.
+  - *Objective*: Maximize user engagement and retention.
+- RE-2  **Explore Recommendation System**: Provides content discovery beyond the follower graph.
+  - *Input Signals*: Similar users, similar content, topic embeddings, historical engagement patterns.
+  - *Methods*: Collaborative filtering, content-based filtering, embedding similarity.
+  - *Objective*: Maximize content discovery and session duration.
+- RE-3  **People Recommendation System**: Generates "Suggested for You" recommendations.
+  - *Input Signals*: Mutual followers, shared interests, similar engagement patterns, existing network structure.
+  - *Output*: Recommended accounts to follow.
+  - *Objective*: Increase graph density and platform retention.
+
+### 3.5 Platform Dynamics Simulation Requirements
+
+- DY-1  **Attention Allocation**: Simulates available attention $A_i(t)$ for user $i$ at time $t$, distributed among feed browsing, profile exploration, search, explore page, and direct messaging, affecting exposure opportunities, engagement probability, and session duration.
+- DY-2  **Engagement Feedback Loops**: Simulates the exposure $\rightarrow$ engagement $\rightarrow$ higher ranking $\rightarrow$ more exposure loop, modeling popularity concentration (rich-get-richer dynamics) and unequal visibility distribution.
+- DY-3  **Network Growth**: Follower graph evolution driven by recommendations, social influence, and preferential attachment:
+  \[
+  P(\text{follow}_i) \propto \text{degree}_i^\alpha
+  \]
+  where $\text{degree}_i$ is the follower count and $\alpha$ is the preferential attachment parameter.
+- DY-4  **Content Diffusion**: Simulates content spread via feed ranking, explore recommendations, and direct sharing cascades.
+- DY-5  **Creator Competition**: Models creator competition for attention, followers, and engagement using creator state variables (audience size, posting frequency, engagement rate, content quality).
+- DY-6  **Social Influence & Opinion Dynamics**: Models influence on following, engagement, and topic/opinion adoption using threshold models, independent cascades, or opinion dynamics.
+- DY-7  **Trend Formation**: Models lifecycle of trends (innovation $\rightarrow$ early adoption $\rightarrow$ algorithmic amplification $\rightarrow$ mass adoption $\rightarrow$ decline) across hashtags, visual styles, memes, and topics.
+- DY-8  **Content Lifecycle**: Models lifecycle stages (creation $\rightarrow$ initial exposure $\rightarrow$ engagement accumulation $\rightarrow$ peak visibility $\rightarrow$ decay) and metrics (reach, impressions, engagement rate, lifetime).
+- DY-9  **User Retention Dynamics**: Computes user retention probability $R_i(t)$ influenced by relevance, connections, satisfaction, and novelty.
+- DY-10 **Moderation Dynamics**: Models moderation actions (downranking, removal, fact-checking, visibility limitation) and their feedback effects on diffusion and user behaviors.
 
 ---
 
@@ -350,11 +395,27 @@ inference server.
 | `describe_photo(url)` | Vision model alt-text (optional) |
 | `get_capabilities()` | Dict of feature flags |
 
----
-
 ## 7. Simulation Model
 
-### Agent lifecycle
+### Formal Platform Representation
+
+At time $t$, the state of the simulation platform is represented as:
+\[
+\text{Platform}_t = (U_t, G_t, C_t, R_t)
+\]
+where:
+- $U_t$ = User and agent states (including profiles, traits, attention $A_i(t)$, and retention $R_i(t)$)
+- $G_t$ = Social graph (including directed follower edges, blocks, restrictions, and mutes)
+- $C_t$ = Content ecosystem (including photos, stories, comments, DMs, reactions, and hashtags)
+- $R_t$ = Recommendation systems (feed ranking, explore, and people suggestion configurations)
+
+The platform state evolves from step $t$ to $t+1$ according to:
+\[
+(U_{t+1}, G_{t+1}, C_{t+1}) = F(U_t, G_t, C_t, R_t)
+\]
+where the transition function $F$ represents the collective emergence of user behaviors, actions, recommendations, and platform dynamics.
+
+### Agent Lifecycle
 
 1. **Initialisation** – Agent is created from a user config (personality traits,
    cluster_id, daily_activity_level, round_actions).
@@ -524,6 +585,52 @@ enabling more realistic agent behaviour.
   can recall visually similar past interactions.
 - Video stories – Short 3–15 s synthetic video clips via text-to-video models
   (CogVideoX, AnimateDiff).
+
+---
+
+### 8.8 Phase 8 – Advanced Agent Actions & Extended Surfaces
+
+**Goal:** Broaden the behavioral scope of agents to fully reflect the interaction graph of Instagram, including extended user actions and distinct platform surfaces.
+
+**Planned components:**
+- **Extended Interaction Actions**:
+  - `YClient/actions/save_photo.py`: Agents can bookmark posts for later recall.
+  - `YClient/actions/reply_comment.py`: Multi-level discussion threads beneath photos.
+  - `YClient/actions/unfollow.py`: Agents dynamically prune their network when content relevance drops below a threshold.
+- **Private Accounts & Follow Requests**:
+  - `YServer/classes/models.py`: Introduce `is_private` flag to `User_mgmt` and a new `FollowRequest` table.
+  - `YClient/actions/request_follow.py` and `YClient/actions/review_follow_requests.py`: Agents must request to follow private accounts, and the target agent can accept or reject the request based on their social graph or persona.
+- **Direct Messaging (DM)**:
+  - `YClient/actions/send_dm.py` and a `Messages` database schema to allow private, direct sharing of posts between mutually following agents.
+- **Dedicated Discovery Surfaces**:
+  - `Explore Page`: A dedicated `get_explore_feed` endpoint serving non-follower content.
+  - `Hashtag & Location Pages`: Allow agents to browse `get_hashtag_feed` dynamically as a distinct browsing action.
+
+---
+
+### 8.9 Phase 9 – Predictive ML Recommendation Systems
+
+**Goal:** Upgrade the simplistic chronological and basic heuristic recommendation mechanics to mirror the complex, multi-objective machine learning ranking algorithms outlined in the Service Description.
+
+**Planned components:**
+- **ML Feed Ranking**:
+  - `YServer/recsys/feed_ranking_service.py`: Replace reverse-chronological sorting with a predictive model. The model computes $P(like)$, $P(comment)$, and expected dwell time based on historical agent engagement logs and network edge weight.
+- **Collaborative Filtering Explore**:
+  - `YServer/recsys/explore_recsys.py`: Provide content to the Explore surface utilizing matrix factorization or two-tower embedding similarity matching to surface content from non-followed accounts.
+
+---
+
+### 8.10 Phase 10 – Advanced Platform Dynamics
+
+**Goal:** Capture macro-level emergent behaviors and lifecycle dynamics across the user base and content ecosystems.
+
+**Planned components:**
+- **Finite Attention Budget**:
+  - Shift agent scheduling from a fixed "1 action per slot" to an "attention budget" (e.g. 100 attention points per day). Agents allocate this budget dynamically (e.g., spending more time on Explore vs Home Feed).
+- **Trend Formation & Hashtag Lifecycle**:
+  - Implement a `TrendService` that computes acceleration and velocity of hashtags, artificially boosting their algorithmic amplification across the Explore page during the "Early Adoption" phase, before artificially applying decay.
+- **User Retention & Churn Dynamics**:
+  - Introduce an `AgentSatisfaction` state. If an agent consistently receives low-quality recommendations or fails to gain followers (creator competition failure), the agent "churns" and ceases activity, requiring the orchestrator to spin down the client gracefully.
 
 ---
 

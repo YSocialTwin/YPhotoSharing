@@ -72,10 +72,9 @@ def main():
         ray.init(namespace=namespace, include_dashboard=False)
         print("--- Started new Ray cluster ---")
 
-    ray_address = ray.get_runtime_context().get_node_id()
-
     # Write connection info for clients
-    (config_dir / "ray_config.temp").write_text(str(ray_address))
+    gcs_address = ray.get_runtime_context().gcs_address
+    (config_dir / "ray_config.temp").write_text(gcs_address)
     (config_dir / "ray_namespace.temp").write_text(namespace)
 
     print(f"--- 🚀 Server Running ---")
@@ -85,7 +84,13 @@ def main():
     print("--- 💾 Waiting for clients... ---")
 
     # Launch orchestrator actor
-    OrchestratorServer.options(name="Orchestrator").remote(
+    try:
+        old_actor = ray.get_actor(server_name, namespace=namespace)
+        ray.kill(old_actor)
+    except ValueError:
+        pass
+
+    server_actor = OrchestratorServer.options(name=server_name, namespace=namespace).remote(
         db_config=db_config,
         config_path=str(config_dir),
         min_to_start=min_to_start,

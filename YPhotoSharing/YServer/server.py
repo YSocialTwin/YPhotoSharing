@@ -21,6 +21,14 @@ from typing import Any, Dict, List, Optional
 import ray
 
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
+from YPhotoSharing.YServer.services.recommendation_service import RecommendationService
+from YPhotoSharing.YServer.services.photo_enrichment_service import PhotoEnrichmentService
+from YPhotoSharing.YServer.services.virality_service import ViralityService
+from YPhotoSharing.YServer.services.influence_service import InfluenceService
+from YPhotoSharing.YServer.services.moderation_service import ModerationService
+from YPhotoSharing.YServer.services.analytics_service import AnalyticsService
+from YPhotoSharing.YServer.services.media_service import MediaService
+from YPhotoSharing.YServer.recsys.follow_recsys import FollowRecsys
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +67,16 @@ class OrchestratorServer:
 
         # Database – server-exclusive
         self._db = DatabaseMiddleware(db_config, config_path)
+        namespace = ray.get_runtime_context().namespace
+        # Services
+        self.recommendation_service = RecommendationService()
+        self.photo_enrichment_service = PhotoEnrichmentService(self._db, namespace)
+        self.virality_service = ViralityService(self._db)
+        self.influence_service = InfluenceService(self._db)
+        self.follow_recsys = FollowRecsys(self._db)
+        self.moderation_service = ModerationService(self._db)
+        self.analytics_service = AnalyticsService(self._db)
+        self.media_service = MediaService()
         logger.info(f"OrchestratorServer '{server_name}' ready (run_id={self._run_id})")
 
     # ------------------------------------------------------------------
@@ -107,7 +125,24 @@ class OrchestratorServer:
         if self._current_hour >= 24:
             self._current_hour = 0
             self._current_day += 1
-        self._db.get_or_create_round(self._current_day, self._current_hour)
+        round_id = self._db.get_or_create_round(self._current_day, self._current_hour)
+        
+        # Phase 3: Enrich photos missing alt_text and embeddings
+        self.photo_enrichment_service.enrich_photos()
+        
+        # Phase 2: Compute recommendations and trending hashtags at end of round
+        with self._db.session_scope() as session:
+            self.recommendation_service.compute_recommendations_for_round(round_id, session)
+            self.recommendation_service.compute_trending_hashtags(round_id, session)
+            
+        try:
+            self.virality_service.compute_virality_scores()
+            self.influence_service.compute_influence_metrics()
+            self.moderation_service.process_round_moderation(round_id)
+            self.analytics_service.compute_round_statistics(round_id)
+        except Exception as e:
+            logger.error(f"Error computing background metrics: {e}")
+            
         logger.info(f"Round advanced → day={self._current_day} hour={self._current_hour}")
 
     def get_simulation_status(self) -> dict:
@@ -133,6 +168,12 @@ class OrchestratorServer:
 
     def create_user(self, user_data: dict) -> str:
         return self._db.create_user(user_data)
+
+    def update_satisfaction(self, user_id: str, delta: float) -> float:
+        return self._db.update_satisfaction(user_id, delta)
+
+    def set_churn_state(self, user_id: str, is_churned: bool) -> bool:
+        return self._db.set_churn_state(user_id, is_churned)
 
     def get_user(self, user_id: str) -> Optional[dict]:
         return self._db.get_user(user_id)
@@ -219,6 +260,50 @@ class OrchestratorServer:
 
     def get_recommendation(self, user_id: str, round_id: str) -> Optional[List[str]]:
         return self._db.get_recommendation(user_id, round_id)
+
+    def get_follow_recommendations(self, user_id: str, limit: int = 5) -> List[str]:
+        return self.follow_recsys.recommend_users_to_follow(user_id, limit)
+
+    def report_content(self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str):
+        return self._db.add_report(reporter_id, content_id, content_type, reason, round_id)
+
+    # ------------------------------------------------------------------
+    # Phase 8 Extended Mechanics
+    # ------------------------------------------------------------------
+
+    def add_follow_request(self, follower_id: str, user_id: str) -> str:
+        return self._db.add_follow_request(follower_id, user_id)
+
+    def review_follow_request(self, follower_id: str, user_id: str, action: str, round_id: str) -> bool:
+        return self._db.review_follow_request(follower_id, user_id, action, round_id)
+
+    def get_pending_follow_requests(self, user_id: str) -> List[dict]:
+        return self._db.get_pending_follow_requests(user_id)
+
+    def save_photo(self, user_id: str, photo_id: str) -> str:
+        return self._db.save_photo(user_id, photo_id)
+
+    def get_saved_photos(self, user_id: str, limit: int = 30) -> List[dict]:
+        return self._db.get_saved_photos(user_id, limit)
+
+    def send_dm(self, sender_id: str, recipient_id: str, content: str, photo_id: str = None) -> str:
+        return self._db.send_dm(sender_id, recipient_id, content, photo_id)
+
+    def get_dms(self, user_id: str, limit: int = 50) -> List[dict]:
+        return self._db.get_dms(user_id, limit)
+
+    def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        return self._db.get_explore_feed(user_id, limit)
+
+    def get_hashtag_feed(self, hashtag: str, limit: int = 30) -> List[dict]:
+        return self._db.get_hashtag_feed(hashtag, limit)
+
+    # ------------------------------------------------------------------
+    # Media Services
+    # ------------------------------------------------------------------
+
+    def save_media(self, content_base64: str, extension: str = "jpg") -> str:
+        return self.media_service.save_media(content_base64, extension)
 
     # ------------------------------------------------------------------
     # Hashtags

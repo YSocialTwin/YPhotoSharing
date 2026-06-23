@@ -8,10 +8,9 @@ The LLM generates the caption; the server persists the record.
 import logging
 import uuid
 from typing import Any, Dict, Optional
+from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 
 logger = logging.getLogger(__name__)
-
-
 async def post_photo(
     server,
     llm_service,
@@ -25,6 +24,7 @@ async def post_photo(
     filter_name: Optional[str] = None,
     location_name: Optional[str] = None,
     agent_attrs: Optional[Dict[str, Any]] = None,
+    image_gen_service = None,
 ) -> Optional[str]:
     """
     Generate a caption with the LLM and persist a new photo via the server.
@@ -58,11 +58,23 @@ async def post_photo(
         logger.warning(f"Caption generation failed for user {user_id}: {exc}")
         caption = f"#{topic}"
 
+    # Generate media url using Phase 7 Image Generation Service
+    try:
+        raw_media = await image_gen_service.generate_image(caption, topic) if image_gen_service else None
+        if raw_media:
+            final_media_url = await server.save_media.remote(raw_media, "jpg")
+        else:
+            final_media_url = None
+    except Exception as e:
+        logger.error(f"Image generation failed: {e}")
+        final_media_url = None
+
     photo_data = {
         "id": str(uuid.uuid4()),
         "user_id": user_id,
         "round": round_id,
         "image_url": image_url or f"https://placeholder.photos/{uuid.uuid4().hex[:8]}",
+        "media_url": final_media_url,
         "caption": caption,
         "filter_name": filter_name,
         "location_name": location_name,

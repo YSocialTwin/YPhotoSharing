@@ -150,9 +150,31 @@ class LLMService:
         return result if result in allowed else "LIKE"
 
     def generate_comment(self, caption: str, author: str,
-                         cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
+                         cluster_id: int = 0, agent_attrs: Optional[dict] = None,
+                         image_url: Optional[str] = None) -> str:
         """Generate a comment on a photo."""
         persona = self._get_persona(cluster_id)
+        
+        # If we have an image and a vision model, route to vision
+        if image_url and self.llm_v:
+            cfg = self.prompts_config.get("generate_comment", DEFAULT_PROMPTS["generate_comment"])
+            system_tpl = cfg.get("system_template", "{persona}")
+            user_tpl = cfg.get("user_template", "{content}")
+            
+            # Append the image tag so the vision model parses it (following describe_photo convention)
+            user_tpl += "\n<img {image_url}>"
+            
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", system_tpl),
+                ("human", user_tpl),
+            ])
+            chain = prompt | self.llm_v | self._parser
+            try:
+                return chain.invoke({"persona": persona, "caption": caption, "author": author, "image_url": image_url}).strip()
+            except Exception as exc:
+                logger.warning(f"Vision LLM call failed for comment: {exc}")
+                # Fallback to standard text LLM below
+                
         return self._render("generate_comment", persona=persona,
                             caption=caption, author=author)
 
@@ -179,6 +201,20 @@ class LLMService:
         result = self._render("decide_follow", persona=persona,
                               username=username, bio=bio or "", topics=topics or "").upper()
         return "FOLLOW" if "FOLLOW" in result else "SKIP"
+
+    def decide_follow_request(self, username: str, bio: str,
+                              cluster_id: int = 0) -> str:
+        """Decide whether to accept a follow request (ACCEPT / REJECT)."""
+        persona = self._get_persona(cluster_id)
+        # Using a fallback text or custom template
+        prompt = f"Your persona: {persona}\nUser '{username}' with bio '{bio}' requested to follow you. Do you ACCEPT or REJECT? Reply with exactly ACCEPT or REJECT."
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage
+            resp = self.llm.invoke([SystemMessage(content=prompt)])
+            text = resp.content.upper()
+            return "ACCEPTED" if "ACCEPT" in text else "REJECTED"
+        except Exception as exc:
+            return "ACCEPTED"
 
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
         """Generate captions for a batch of requests sequentially."""

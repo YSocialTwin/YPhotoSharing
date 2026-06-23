@@ -40,6 +40,7 @@ async def post_comment(
     caption = photo.get("caption", "")
     photo_id = photo.get("id", "")
     author = photo.get("username", "user")
+    image_url = photo.get("media_url") or photo.get("image_url")
 
     try:
         body = await llm_service.generate_comment.remote(
@@ -47,6 +48,7 @@ async def post_comment(
             author=author,
             cluster_id=cluster_id,
             agent_attrs=agent_attrs,
+            image_url=image_url,
         )
     except Exception as exc:
         logger.warning(f"Comment generation failed for user {user_id}: {exc}")

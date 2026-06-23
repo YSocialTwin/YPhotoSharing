@@ -1,0 +1,32 @@
+site_name: YPhotoSharing Documentation
+site_description: An agentic simulation environment for photo-sharing social networks.
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+  palette:
+    scheme: slate
+    primary: deep purple
+    accent: deep purple
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Architecture: architecture.md
+  - Configuration: configuration.md
+  - Experiments & Presets: experiments.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tasklist:
+      custom_checkbox: true

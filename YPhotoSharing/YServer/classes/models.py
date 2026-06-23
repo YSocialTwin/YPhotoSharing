@@ -148,6 +148,18 @@ class User_mgmt(Base):
     is_verified = Column(Boolean, default=False)
     last_active_day = Column(Integer)
 
+    # Phase 4: Influence graph analytics
+    influence_score = Column(Float, default=0.0)
+    broker_score = Column(Float, default=0.0)
+    
+    # Phase 5
+    stress_level = Column(Float, default=0.0)
+    is_shadow_banned = Column(Integer, default=0)
+
+    # Phase 10: Advanced Platform Dynamics
+    satisfaction_score = Column(Float, default=100.0)
+    is_churned = Column(Boolean, default=False)
+
     # Relationships
     follows_as_user = relationship(
         "Follow", foreign_keys="Follow.user_id", back_populates="user",
@@ -212,8 +224,19 @@ class Photo(Base):
     num_comments = Column(Integer, default=0)
     num_shares = Column(Integer, default=0)
     is_sponsored = Column(Boolean, default=False)
+    embedding = Column(Text, nullable=True)     # JSON-serialized embedding
+    aesthetic_score = Column(Float, nullable=True) # 0 to 1 score
+    
+    # Phase 4: Virality
+    viral_score = Column(Float, default=0.0)
     created_at = Column(DateTime, server_default=func.now())
     deleted_at = Column(DateTime)
+    
+    # Phase 5
+    is_removed = Column(Integer, default=0)
+    
+    # Phase 7
+    media_url = Column(String(400), nullable=True)
 
     # Relationships
     user = relationship("User_mgmt", back_populates="photos")
@@ -267,6 +290,86 @@ Index("idx_stories_user_id", Story.user_id)
 Index("idx_stories_round", Story.round)
 
 
+# ================================================
+# MODERATION & SAFETY
+# ================================================
+
+class ModerationEvent(Base):
+    """Records every moderation decision."""
+    __tablename__ = "moderation_events"
+    
+    id = Column(String(36), primary_key=True)
+    content_id = Column(String(36), nullable=False, index=True)
+    content_type = Column(String(20), nullable=False) # 'photo' or 'comment'
+    action_taken = Column(String(20), nullable=False) # 'remove', 'shadow-ban', 'warn'
+    reason = Column(Text)
+    confidence = Column(Float, default=1.0)
+    round_id = Column(String(36))
+
+
+class Reported(Base):
+    """User-to-user content reports."""
+    __tablename__ = "reported"
+    
+    id = Column(String(36), primary_key=True)
+    reporter_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    content_id = Column(String(36), nullable=False)
+    content_type = Column(String(20), nullable=False)
+    reason = Column(Text)
+    round_id = Column(String(36))
+
+    reporter = relationship("User_mgmt")
+
+
+# ================================================
+# ANALYTICS (Phase 6)
+# ================================================
+
+class AnalyticsSnapshot(Base):
+    """Stores aggregate system metrics per round."""
+    __tablename__ = "analytics_snapshots"
+    
+    id = Column(String(36), primary_key=True)
+    round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
+    active_users = Column(Integer, default=0)
+    total_photos = Column(Integer, default=0)
+    total_reactions = Column(Integer, default=0)
+    total_comments = Column(Integer, default=0)
+    total_follows = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+
+    round_obj = relationship("Round")
+
+
+# ================================================
+# PHASE 8 (Extended Mechanics)
+# ================================================
+
+class FollowRequest(Base):
+    __tablename__ = "follow_requests"
+    id = Column(String(36), primary_key=True)
+    follower_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), default="pending") # pending, accepted, rejected
+    created_at = Column(DateTime, server_default=func.now())
+
+class SavedPhoto(Base):
+    __tablename__ = "saved_photos"
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    photo_id = Column(String(36), ForeignKey("photos.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(String(36), primary_key=True)
+    sender_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    recipient_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    photo_id = Column(String(36), ForeignKey("photos.id", ondelete="SET NULL"), nullable=True)
+    content = Column(Text)
+    created_at = Column(DateTime, server_default=func.now())
+
+
 class StoryView(Base):
     """Records which user viewed which story (and when)."""
 
@@ -282,6 +385,9 @@ class StoryView(Base):
     __table_args__ = (
         UniqueConstraint("story_id", "viewer_id", name="uq_story_view"),
     )
+
+
+Index("idx_story_views_user", StoryView.viewer_id)
 
 
 # ================================================
@@ -371,6 +477,10 @@ class Comment(Base):
     is_deleted = Column(Boolean, default=False)
     round = Column(String(36))
     created_at = Column(DateTime, server_default=func.now())
+    timestamp = Column(DateTime, default=func.now(), index=True)
+    
+    # Phase 5
+    is_removed = Column(Integer, default=0)
 
     photo = relationship("Photo", back_populates="comments")
     user = relationship("User_mgmt", back_populates="comments")
@@ -447,6 +557,7 @@ class PhotoEmotion(Base):
     photo_id = Column(String(36), ForeignKey("photos.id", ondelete="CASCADE"), nullable=False)
     emotion_id = Column(String(36), ForeignKey("emotions.id", ondelete="CASCADE"), nullable=False)
     score = Column(Float, default=0.0)
+    viral_score = Column(Float, default=0.0)
 
     photo = relationship("Photo", back_populates="emotions")
     emotion = relationship("Emotion", back_populates="photo_emotions")
@@ -466,6 +577,9 @@ class UserInterest(Base):
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
     interest_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"))
     round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"))
+    
+    # Phase 4: Opinion dynamics
+    opinion_score = Column(Float, default=0.0) # Sentiment valence (-1.0 to 1.0)
 
     user = relationship("User_mgmt", back_populates="user_interests")
     interest = relationship("Interest", back_populates="user_interests")

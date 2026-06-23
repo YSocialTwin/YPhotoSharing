@@ -34,6 +34,7 @@ from YPhotoSharing.YServer.classes.models import (
     PhotoTopic,
     Reaction,
     Recommendation,
+    Reported,
     Round,
     Story,
     StoryView,
@@ -157,6 +158,26 @@ class DatabaseMiddleware:
             rows = s.query(User_mgmt).limit(limit).offset(offset).all()
             return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows]
 
+    def update_satisfaction(self, user_id: str, delta: float) -> float:
+        """Update and return the new satisfaction score. Cap at 0 and 100."""
+        with self.session_scope() as s:
+            user = s.query(User_mgmt).filter_by(id=user_id).first()
+            if not user:
+                return 0.0
+            new_score = max(0.0, min(100.0, user.satisfaction_score + delta))
+            user.satisfaction_score = new_score
+            if new_score <= 10.0:
+                user.is_churned = True
+            return new_score
+
+    def set_churn_state(self, user_id: str, is_churned: bool) -> bool:
+        with self.session_scope() as s:
+            user = s.query(User_mgmt).filter_by(id=user_id).first()
+            if not user:
+                return False
+            user.is_churned = is_churned
+            return True
+
     # ------------------------------------------------------------------
     # Follow helpers
     # ------------------------------------------------------------------
@@ -194,6 +215,14 @@ class DatabaseMiddleware:
         with self.session_scope() as s:
             pid = photo_data.get("id") or str(uuid.uuid4())
             s.add(Photo(id=pid, **{k: v for k, v in photo_data.items() if k != "id"}))
+            
+            # Phase 4: Handle sharing (increment parent num_shares)
+            parent_id = photo_data.get("parent_photo_id")
+            if parent_id:
+                parent = s.query(Photo).filter_by(id=parent_id).first()
+                if parent:
+                    parent.num_shares += 1
+                    
             return pid
 
     def get_photo(self, photo_id: str) -> Optional[dict]:
@@ -297,7 +326,7 @@ class DatabaseMiddleware:
             if existing:
                 return False
             s.add(StoryView(id=str(uuid.uuid4()), story_id=story_id, viewer_id=viewer_id))
-            story = s.query(Story).filter_by(id=story_id).first()
+            story = s.query(Story).filter_by(story_id=story_id).first()
             if story:
                 story.view_count = (story.view_count or 0) + 1
             return True
@@ -349,7 +378,8 @@ class DatabaseMiddleware:
     # ------------------------------------------------------------------
 
     def get_home_feed(self, user_id: str, limit: int = 30) -> List[dict]:
-        """Return the most recent photos from users that user_id follows."""
+        """Return the ML ranked photos from users that user_id follows."""
+        from YPhotoSharing.YServer.recsys.feed_ranking_service import FeedRankingService
         with self.session_scope() as s:
             following_ids = [
                 r.user_id for r in
@@ -357,14 +387,29 @@ class DatabaseMiddleware:
             ]
             if not following_ids:
                 return []
+            
+            # Fetch a larger candidate pool to rank
             rows = (
                 s.query(Photo)
-                .filter(Photo.user_id.in_(following_ids), Photo.deleted_at.is_(None))
+                .join(User_mgmt, Photo.user_id == User_mgmt.id)
+                .filter(
+                    Photo.user_id.in_(following_ids),
+                    Photo.deleted_at.is_(None),
+                    Photo.is_removed == 0,
+                    User_mgmt.is_shadow_banned == 0
+                )
                 .order_by(Photo.created_at.desc())
-                .limit(limit)
+                .limit(100) # Pre-filter candidate generation
                 .all()
             )
-            return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows]
+            
+            candidates = [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows]
+            
+            # Phase 9: Rank with FeedRankingService
+            ranker = FeedRankingService(s)
+            ranked = ranker.rank_feed(user_id, candidates)
+            
+            return ranked[:limit]
 
     # ------------------------------------------------------------------
     # Memory helpers
@@ -395,12 +440,29 @@ class DatabaseMiddleware:
 
     def get_or_create_interest(self, interest_name: str) -> str:
         with self.session_scope() as s:
-            row = s.query(Interest).filter_by(interest=interest_name).first()
-            if row:
-                return row.iid
-            iid = str(uuid.uuid4())
-            s.add(Interest(iid=iid, interest=interest_name))
-            return iid
+            obj = s.query(Interest).filter_by(interest=interest_name).first()
+            if obj:
+                return obj.iid
+            new_id = str(uuid.uuid4())
+            s.add(Interest(iid=new_id, interest=interest_name))
+            return new_id
+
+    # ------------------------------------------------------------------
+    # Moderation & Reporting
+    # ------------------------------------------------------------------
+
+    def add_report(self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str):
+        with self.session_scope() as s:
+            report_id = str(uuid.uuid4())
+            s.add(Reported(
+                id=report_id,
+                reporter_id=reporter_id,
+                content_id=content_id,
+                content_type=content_type,
+                reason=reason,
+                round_id=round_id
+            ))
+            return report_id
 
     def set_user_interests(self, user_id: str, interest_ids: List[str], round_id: str) -> None:
         with self.session_scope() as s:
@@ -411,3 +473,96 @@ class DatabaseMiddleware:
                 if not existing:
                     s.add(UserInterest(id=str(uuid.uuid4()), user_id=user_id,
                                        interest_id=iid, round_id=round_id))
+
+    # ------------------------------------------------------------------
+    # Phase 8 Helpers
+    # ------------------------------------------------------------------
+
+    def add_follow_request(self, follower_id: str, user_id: str) -> str:
+        from YPhotoSharing.YServer.classes.models import FollowRequest
+        with self.session_scope() as s:
+            req_id = str(uuid.uuid4())
+            req = FollowRequest(id=req_id, follower_id=follower_id, user_id=user_id, status="pending")
+            s.add(req)
+            return req_id
+
+    def review_follow_request(self, follower_id: str, user_id: str, action: str, round_id: str) -> bool:
+        from YPhotoSharing.YServer.classes.models import FollowRequest
+        with self.session_scope() as s:
+            req = s.query(FollowRequest).filter_by(follower_id=follower_id, user_id=user_id, status="pending").first()
+            if not req: return False
+            req.status = action # 'accepted' or 'rejected'
+            if action == "accepted":
+                # Create the follow edge
+                existing_follow = s.query(Follow).filter_by(follower_id=follower_id, user_id=user_id, action="follow").first()
+                if not existing_follow:
+                    s.add(Follow(follower_id=follower_id, user_id=user_id, round=round_id, action="follow"))
+            return True
+
+    def get_pending_follow_requests(self, user_id: str) -> List[dict]:
+        from YPhotoSharing.YServer.classes.models import FollowRequest
+        with self.session_scope() as s:
+            reqs = s.query(FollowRequest).filter_by(user_id=user_id, status="pending").all()
+            return [{"id": r.id, "follower_id": r.follower_id} for r in reqs]
+
+    def save_photo(self, user_id: str, photo_id: str) -> str:
+        from YPhotoSharing.YServer.classes.models import SavedPhoto
+        with self.session_scope() as s:
+            sid = str(uuid.uuid4())
+            s.add(SavedPhoto(id=sid, user_id=user_id, photo_id=photo_id))
+            return sid
+
+    def get_saved_photos(self, user_id: str, limit: int = 30) -> List[dict]:
+        from YPhotoSharing.YServer.classes.models import SavedPhoto, Photo
+        with self.session_scope() as s:
+            rows = s.query(Photo).join(SavedPhoto).filter(SavedPhoto.user_id == user_id).order_by(SavedPhoto.created_at.desc()).limit(limit).all()
+            return [{"id": r.id, "caption": r.caption} for r in rows]
+
+    def send_dm(self, sender_id: str, recipient_id: str, content: str, photo_id: str = None) -> str:
+        from YPhotoSharing.YServer.classes.models import Message
+        with self.session_scope() as s:
+            mid = str(uuid.uuid4())
+            s.add(Message(id=mid, sender_id=sender_id, recipient_id=recipient_id, content=content, photo_id=photo_id))
+            return mid
+
+    def get_dms(self, user_id: str, limit: int = 50) -> List[dict]:
+        from YPhotoSharing.YServer.classes.models import Message
+        from sqlalchemy import or_
+        with self.session_scope() as s:
+            rows = s.query(Message).filter(or_(Message.sender_id == user_id, Message.recipient_id == user_id)).order_by(Message.created_at.desc()).limit(limit).all()
+            return [{"id": r.id, "sender": r.sender_id, "recipient": r.recipient_id, "content": r.content} for r in rows]
+
+    def unfollow_user(self, follower_id: str, user_id: str, round_id: str) -> bool:
+        with self.session_scope() as s:
+            s.add(Follow(follower_id=follower_id, user_id=user_id, round=round_id, action="unfollow"))
+            s.query(Follow).filter_by(follower_id=follower_id, user_id=user_id, action="follow").delete()
+            return True
+
+    def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        from YPhotoSharing.YServer.classes.models import Photo, Follow
+        from YPhotoSharing.YServer.recsys.explore_recsys import ExploreRecsys
+        with self.session_scope() as s:
+            # Get popular recent posts not from followed users and not removed
+            followed_subq = s.query(Follow.user_id).filter_by(follower_id=user_id, action="follow").subquery()
+            
+            # Fetch a larger candidate pool for CF ranking
+            rows = s.query(Photo).filter(
+                Photo.user_id.notin_(followed_subq),
+                Photo.user_id != user_id, 
+                Photo.is_removed == 0
+            ).order_by(Photo.created_at.desc()).limit(100).all()
+            
+            candidates = [{c.name: getattr(p, c.name) for c in p.__table__.columns} for p in rows]
+            
+            # Phase 9: Rank with ExploreRecsys CF matching
+            ranker = ExploreRecsys()
+            ranked = ranker.evaluate(user_id, "", s, candidates, limit)
+            
+            return ranked
+
+    def get_hashtag_feed(self, hashtag: str, limit: int = 30) -> List[dict]:
+        from YPhotoSharing.YServer.classes.models import Photo
+        with self.session_scope() as s:
+            # Simple LIKE query for simulation
+            rows = s.query(Photo).filter(Photo.caption.like(f"%#{hashtag}%"), Photo.is_removed == 0).order_by(Photo.created_at.desc()).limit(limit).all()
+            return [{"id": p.id, "user_id": p.user_id, "caption": p.caption} for p in rows]

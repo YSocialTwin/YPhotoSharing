@@ -80,6 +80,14 @@ def main():
     num_rounds = simulation_config.get("num_rounds", 24)
     start_day = simulation_config.get("start_day", 0)
 
+    from YPhotoSharing.YClient.LLM_interactions.vision_service import VisionService
+
+    # Spin up or get Vision Service actor
+    try:
+        vision_actor = ray.get_actor("VisionService", namespace=namespace)
+    except ValueError:
+        vision_actor = VisionService.options(name="VisionService", namespace=namespace).remote(config=llm_v_config or {})
+
     # Spin up client actor
     client_actor = SimulationClient.options(name=f"Client_{client_id}").remote(
         client_id=client_id,
@@ -91,6 +99,9 @@ def main():
         logging_config=logging_config,
         simulation_config=simulation_config,
     )
+
+    # Call async setup method
+    ray.get(client_actor.setup.remote())
 
     n_loaded = ray.get(client_actor.load_agents.remote(users))
     print(f"--- 👤 Loaded {n_loaded} agents ---")

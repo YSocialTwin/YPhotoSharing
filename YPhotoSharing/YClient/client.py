@@ -79,7 +79,14 @@ class SimulationClient:
         self._start_time = time.time()
 
         # Connect to server
-        self.server = ray.get_actor(server_name, namespace=namespace)
+        for i in range(10):
+            try:
+                self.server = ray.get_actor(server_name, namespace=namespace)
+                break
+            except ValueError:
+                if i == 9:
+                    raise
+                time.sleep(1)
 
         # Instantiate LLM service
         llm_config = llm_config or {"address": "localhost", "port": 11434, "model": "llama3.2"}
@@ -88,15 +95,30 @@ class SimulationClient:
             llm_config, prompts_config, llm_v_config, logging_config or {}
         )
 
+        from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
+        use_local_diffusion = self.simulation_config.get("use_local_diffusion", False)
+        local_diffusion_model = self.simulation_config.get("local_diffusion_model", "segmind/tiny-sd")
+        self.image_gen_service = ImageGenerationService(
+            use_local_diffusion=use_local_diffusion,
+            local_diffusion_model=local_diffusion_model
+        )
+
         # Register with server
-        server_meta = ray.get(self.server.register_client.remote(
-            client_id=client_id,
-            client_info={"client_id": client_id},
-        ))
+        # Do NOT call ray.get here. It will block the async actor loop.
+        pass
+
+    async def setup(self):
+        """Asynchronously register with the server."""
+        server_meta = await self.server.register_client.remote(
+            client_id=self.client_id,
+            client_info={"type": "simulation_client"},
+        )
+        self._current_day = server_meta["current_day"]
+        self._current_hour = server_meta["current_hour"]
         self._run_id = server_meta.get("run_id", str(uuid.uuid4()))
         logger.info(
-            f"SimulationClient {client_id} connected "
-            f"(run_id={self._run_id}, server={server_name})"
+            f"Client {self.client_id} registered. "
+            f"Server run_id={self._run_id}"
         )
 
     # ------------------------------------------------------------------
@@ -105,10 +127,24 @@ class SimulationClient:
 
     def load_agents(self, user_configs: List[dict]) -> int:
         """Register agents from user config dicts. Returns number loaded."""
-        self._agents = [
-            Agent(user_data=u, server=self.server, llm_service=self.llm_service)
-            for u in user_configs
-        ]
+        self._agents = []
+        import random
+        for u in user_configs:
+            # Phase 8: Randomly assign 20% to be private accounts
+            if "is_private" not in u:
+                u["is_private"] = random.random() < 0.20
+            # Register user in the database
+            try:
+                import ray
+                u["id"] = ray.get(self.server.create_user.remote(u))
+            except Exception as e:
+                logger.warning(f"Could not register user {u.get('id')}: {e}")
+            self._agents.append(Agent(
+                user_data=u, 
+                server=self.server, 
+                llm_service=self.llm_service,
+                image_gen_service=self.image_gen_service
+            ))
         logger.info(f"Client {self.client_id}: loaded {len(self._agents)} agents")
         return len(self._agents)
 
@@ -116,22 +152,15 @@ class SimulationClient:
     # Simulation loop
     # ------------------------------------------------------------------
 
-    def run_round(self, day: int, hour: int) -> dict:
+    async def run_round(self, day: int, hour: int) -> dict:
         """
         Execute one simulation round for all agents managed by this client.
         Returns a summary dict.
         """
-        round_id = ray.get(self.server.get_or_create_round.remote(day, hour))
+        round_id = await self.server.get_or_create_round.remote(day, hour)
         self._round_count += 1
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            all_results = loop.run_until_complete(
-                self._run_agents_async(day, hour, round_id)
-            )
-        finally:
-            loop.close()
+        all_results = await self._run_agents_async(day, hour, round_id)
 
         summary = {
             "client_id": self.client_id,
@@ -144,7 +173,7 @@ class SimulationClient:
         logger.info(f"Round {day}/{hour} complete: {summary['actions']} actions")
 
         # Signal readiness to advance
-        ray.get(self.server.ready_for_next_round.remote(self.client_id))
+        await self.server.ready_for_next_round.remote(self.client_id)
         return summary
 
     async def _run_agents_async(self, day: int, hour: int,

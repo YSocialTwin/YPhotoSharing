@@ -1,6 +1,6 @@
 {
   "client_id": "client_001",
-  "server_name": "Orchestrator",
+  "server_name": "orchestrator_server",
   "namespace": "yphotosharing",
   "address": "auto",
   "users_file": "users.json",
