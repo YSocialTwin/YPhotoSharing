@@ -1,0 +1,25 @@
+{
+  "client_id": "client_001",
+  "server_name": "Orchestrator",
+  "namespace": "yphotosharing",
+  "address": "auto",
+  "users_file": "users.json",
+  "simulation": {
+    "num_rounds": 48,
+    "start_day": 0
+  },
+  "llm": {
+    "backend": "ollama",
+    "address": "localhost",
+    "port": 11434,
+    "model": "llama3.2",
+    "temperature": 0.7,
+    "use_vllm": false,
+    "use_remote_batch": false
+  },
+  "llm_vision": null,
+  "prompts": {},
+  "logging": {
+    "enable_console_log": true
+  }
+}
