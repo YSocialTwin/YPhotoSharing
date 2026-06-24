@@ -74,7 +74,8 @@ class OpinionHandler:
             return  # Opinion dynamics disabled
 
         # Check if agent already has an opinion on this topic
-        existing_opinion = self.db.get_latest_agent_opinion(agent_id, topic_id)
+        lookup_topic = self._resolve_topic_name(topic_id) or topic_id
+        existing_opinion = self.db.get_latest_agent_opinion(agent_id, lookup_topic)
         if existing_opinion is not None:
             return  # Opinion already exists
 
@@ -151,8 +152,17 @@ class OpinionHandler:
             )
             return []
 
+    def _resolve_topic_name(self, topic_id: str) -> Optional[str]:
+        if hasattr(self.db, "get_topic_name_from_id"):
+            try:
+                return self.db.get_topic_name_from_id(topic_id)
+            except Exception:
+                return None
+        return None
+
     def _get_neighbors_opinions_redis(self, agent_id: str, topic_id: str) -> List[float]:
         """Get neighbors opinions using Redis backend."""
+        topic_name = self._resolve_topic_name(topic_id) or topic_id
         # Redis implementation: hybrid approach
         # Step 1: Get followees from Redis follow keys
         follow_pattern = self.db.get_redis_key_pattern("follow", "*")
@@ -181,7 +191,7 @@ class OpinionHandler:
         # Step 2: Get opinions from Redis for each followee
         opinions = []
         for followee_id in followee_ids:
-            opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
+            opinion = self.db.get_latest_agent_opinion(followee_id, topic_name)
             if opinion is not None:
                 opinions.append(opinion)
 
@@ -192,6 +202,7 @@ class OpinionHandler:
         from sqlalchemy.orm import Session
 
         from YPhotoSharing.YServer.classes.models import Follow
+        topic_name = self._resolve_topic_name(topic_id) or topic_id
 
         with Session(self.db.engine) as session:
             # Get list of user_ids that agent follows (where agent is the follower and
@@ -210,7 +221,7 @@ class OpinionHandler:
             # Get opinions of each followee on this topic
             opinions = []
             for followee_id in followee_ids:
-                opinion = self.db.get_latest_agent_opinion(followee_id, topic_id)
+                opinion = self.db.get_latest_agent_opinion(followee_id, topic_name)
                 if opinion is not None:
                     opinions.append(opinion)
 

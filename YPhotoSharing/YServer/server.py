@@ -16,10 +16,12 @@ import json
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
 
+from YPhotoSharing.common_utils import setup_logging
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 from YPhotoSharing.YServer.services.recommendation_service import RecommendationService
 from YPhotoSharing.YServer.services.photo_enrichment_service import PhotoEnrichmentService
@@ -28,6 +30,7 @@ from YPhotoSharing.YServer.services.influence_service import InfluenceService
 from YPhotoSharing.YServer.services.moderation_service import ModerationService
 from YPhotoSharing.YServer.services.analytics_service import AnalyticsService
 from YPhotoSharing.YServer.services.media_service import MediaService
+from YPhotoSharing.YServer.services.social_action_service import SocialActionService
 from YPhotoSharing.YServer.recsys.follow_recsys import FollowRecsys
 
 logger = logging.getLogger(__name__)
@@ -65,6 +68,11 @@ class OrchestratorServer:
         self._run_id = str(uuid.uuid4())
         self._start_time = time.time()
 
+        global logger
+        enable_console = self.simulation_config.get("logging", {}).get("enable_console_log", True)
+        logger = setup_logging(Path(config_path), "server", enable_console)
+        self.logger = logger
+
         # Database – server-exclusive
         self._db = DatabaseMiddleware(db_config, config_path)
         namespace = ray.get_runtime_context().namespace
@@ -77,6 +85,40 @@ class OrchestratorServer:
         self.moderation_service = ModerationService(self._db)
         self.analytics_service = AnalyticsService(self._db)
         self.media_service = MediaService()
+        self.social_action_service = SocialActionService(self._db, logger=logger)
+
+        # Initialize YSimulator Managers
+        from YPhotoSharing.YServer.interests_modeling.interest_manager import InterestManager
+        from YPhotoSharing.YServer.opinion_dynamics.opinion_handler import OpinionHandler
+        from YPhotoSharing.YServer.coordination.round_manager import RoundManager
+        from YPhotoSharing.YServer.coordination.archetype_manager import ArchetypeManager
+        from YPhotoSharing.YServer.coordination.client_manager import ClientManager
+
+        self.interest_manager = InterestManager(db_service=self._db)
+        self.opinion_handler = OpinionHandler(
+            db_adapter=self._db,
+            simulation_config=self.simulation_config,
+            agent_profiles_cache={},
+            current_round_id_getter=lambda: self.current_round_id,
+            logger=logger
+        )
+        self.round_manager = RoundManager(
+            db_adapter=self._db,
+            interest_manager=self.interest_manager,
+            num_slots_per_day=self.simulation_config.get("simulation", {}).get("num_slots_per_day", 24),
+            visibility_rounds=self.simulation_config.get("posts", {}).get("visibility_rounds", 36),
+            logger=logger
+        )
+        self.archetype_manager = ArchetypeManager(
+            db_adapter=self._db,
+            archetypes_enabled=self.simulation_config.get("agent_archetypes", {}).get("enabled", False),
+            archetype_transitions=self.simulation_config.get("agent_archetypes", {}).get("transitions", {}),
+            logger=logger
+        )
+        self.client_manager = ClientManager(timeout_seconds=self.timeout_seconds, logger=logger)
+
+        self.current_round_id = None
+
         logger.info(f"OrchestratorServer '{server_name}' ready (run_id={self._run_id})")
 
     # ------------------------------------------------------------------
@@ -205,19 +247,25 @@ class OrchestratorServer:
     # ------------------------------------------------------------------
 
     def post_photo(self, photo_data: dict) -> str:
-        return self._db.create_photo(photo_data)
+        return self.social_action_service.post_photo(photo_data)
 
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
-        return self._db.add_photo_emotion(photo_id, emotion)
+        return self.social_action_service.add_photo_emotion(photo_id, emotion)
 
     def get_photo(self, photo_id: str) -> Optional[dict]:
-        return self._db.get_photo(photo_id)
+        return self.social_action_service.get_photo(photo_id)
+
+    def get_photo_topics(self, photo_id: str) -> list:
+        return self.social_action_service.get_photo_topics(photo_id)
+
+    def get_topic_name_from_id(self, topic_id: str, client_id: str = None) -> Optional[str]:
+        return self._db.get_topic_name_from_id(topic_id)
 
     def get_user_photos(self, user_id: str, limit: int = 20, offset: int = 0) -> List[dict]:
-        return self._db.get_user_photos(user_id, limit=limit, offset=offset)
+        return self.social_action_service.get_user_photos(user_id, limit=limit, offset=offset)
 
     def delete_photo(self, photo_id: str) -> bool:
-        return self._db.delete_photo(photo_id)
+        return self.social_action_service.delete_photo(photo_id)
 
     # ------------------------------------------------------------------
     # Reactions
@@ -225,10 +273,10 @@ class OrchestratorServer:
 
     def react_to_photo(self, user_id: str, photo_id: str,
                        reaction_type: str, round_id: str) -> str:
-        return self._db.add_reaction(user_id, photo_id, reaction_type, round_id)
+        return self.social_action_service.react_to_photo(user_id, photo_id, reaction_type, round_id)
 
     def remove_reaction(self, user_id: str, photo_id: str) -> bool:
-        return self._db.remove_reaction(user_id, photo_id)
+        return self.social_action_service.remove_reaction(user_id, photo_id)
 
     # ------------------------------------------------------------------
     # Comments
@@ -236,23 +284,25 @@ class OrchestratorServer:
 
     def post_comment(self, user_id: str, photo_id: str, body: str,
                      round_id: str, parent_comment_id: str = None) -> str:
-        return self._db.add_comment(user_id, photo_id, body, round_id, parent_comment_id)
+        return self.social_action_service.post_comment(
+            user_id, photo_id, body, round_id, parent_comment_id
+        )
 
     def get_comments(self, photo_id: str, limit: int = 50) -> List[dict]:
-        return self._db.get_comments(photo_id, limit=limit)
+        return self.social_action_service.get_comments(photo_id, limit=limit)
 
     # ------------------------------------------------------------------
     # Stories
     # ------------------------------------------------------------------
 
     def post_story(self, story_data: dict) -> str:
-        return self._db.create_story(story_data)
+        return self.social_action_service.post_story(story_data)
 
     def view_story(self, story_id: str, viewer_id: str) -> bool:
-        return self._db.record_story_view(story_id, viewer_id)
+        return self.social_action_service.view_story(story_id, viewer_id)
 
     def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
-        return self._db.get_recent_stories(user_id, limit)
+        return self.social_action_service.get_recent_stories(user_id, limit)
 
     # ------------------------------------------------------------------
     # Feeds & recommendations
@@ -271,7 +321,9 @@ class OrchestratorServer:
         return self.follow_recsys.recommend_users_to_follow(user_id, limit)
 
     def report_content(self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str):
-        return self._db.add_report(reporter_id, content_id, content_type, reason, round_id)
+        return self.social_action_service.add_report(
+            reporter_id, content_id, content_type, reason, round_id
+        )
 
     # ------------------------------------------------------------------
     # Phase 8 Extended Mechanics
@@ -287,16 +339,16 @@ class OrchestratorServer:
         return self._db.get_pending_follow_requests(user_id)
 
     def save_photo(self, user_id: str, photo_id: str) -> str:
-        return self._db.save_photo(user_id, photo_id)
+        return self.social_action_service.save_photo(user_id, photo_id)
 
     def get_saved_photos(self, user_id: str, limit: int = 30) -> List[dict]:
-        return self._db.get_saved_photos(user_id, limit)
+        return self.social_action_service.get_saved_photos(user_id, limit)
 
     def send_dm(self, sender_id: str, recipient_id: str, content: str, photo_id: str = None) -> str:
-        return self._db.send_dm(sender_id, recipient_id, content, photo_id)
+        return self.social_action_service.send_dm(sender_id, recipient_id, content, photo_id)
 
     def get_dms(self, user_id: str, limit: int = 50) -> List[dict]:
-        return self._db.get_dms(user_id, limit)
+        return self.social_action_service.get_dms(user_id, limit)
 
     def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
         return self._db.get_explore_feed(user_id, limit)
@@ -355,8 +407,20 @@ class OrchestratorServer:
     def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
         return self._db.update_comment_sentiment(comment_id, sentiment_score)
 
-    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float) -> bool:
-        return self._db.update_user_opinion(user_id, topic, opinion_score)
+    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
+        return self._db.update_user_opinion(user_id, topic, opinion_score, round_id)
 
     def get_user_opinions(self, user_id: str) -> dict:
         return self._db.get_user_opinions(user_id)
+
+    def get_latest_agent_opinion(self, agent_id: str, topic_id: str, client_id: str = None) -> Optional[float]:
+        topic_name = self.get_topic_name_from_id(topic_id, client_id=client_id) or topic_id
+        return self._db.get_latest_agent_opinion(agent_id, topic_name)
+
+    def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
+        return self._db.get_stress_reward(agent_id, round_id, backward_rounds)
+
+    def set_stress_reward_variations(
+        self, user_id: str, round_id: str, variations: list, action_name: Optional[str] = None
+    ) -> int:
+        return self._db.set_stress_reward_variations(user_id, round_id, variations, action_name)
