@@ -38,7 +38,8 @@ Navigate to the `example/` directory. You will find:
   `photo_sharing` block and will be preserved by the loader. The current
   example mirrors the implemented runtime fields, including `attention_budget`,
   `is_private`, `is_verified`, `recsys_type`, `custom_features`, and
-  `photo_sharing.creator_tier`.
+  `photo_sharing.creator_tier`. Churn and new-user injection are configured in
+  `client_config.json` under `simulation.agents` and default to disabled.
 
 ### 2. Start the Orchestrator Server
 Open a terminal and start the server. This automatically starts a local Ray cluster.

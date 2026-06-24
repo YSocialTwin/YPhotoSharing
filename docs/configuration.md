@@ -53,7 +53,18 @@ This file controls the agent logic, simulation duration, modalities, and LLM bac
     },
     "agents": {
       "probability_of_secondary_follow": 0.1,
-      "probability_of_follow_back": 0.1
+      "probability_of_follow_back": 0.1,
+      "churn": {
+        "enabled": false,
+        "churn_probability": 0.0,
+        "inactivity_threshold": 5,
+        "churn_percentage": 0.0
+      },
+      "new_agents": {
+        "enabled": false,
+        "probability_new_agents": 0.0,
+        "percentage_new_agents": 0.0
+      }
     },
     "actions_likelihood": {
         "post_photo": 0.15,
@@ -112,6 +123,8 @@ This file controls the agent logic, simulation duration, modalities, and LLM bac
 - **`simulation.opinion_dynamics.likert_scale`**: Ordered opinion classes used by the discrete evaluator. The recommended default is a 5-point scale from strongly disagree to strongly agree.
 - **`simulation.discussion_topics`**: Array of topics that are configured within the database for agents to engage with, post about, and build interest profiles for.
 - **`simulation.agents`**: Probability mechanics governing secondary follow cascades and followback reciprocity.
+- **`simulation.agents.churn`**: Client-side churn controls. Set `enabled` to `true` to allow inactive agents to churn, and tune `churn_probability`, `inactivity_threshold`, and `churn_percentage` to control how aggressive the churn pass is.
+- **`simulation.agents.new_agents`**: Client-side new-user injection controls. Set `enabled` to `true` and configure `probability_new_agents` and `percentage_new_agents` to control how many agents are introduced from the existing population templates.
 - **`simulation.enable_sentiment`**: Enables sentiment extraction for photos and comments.
 - **`simulation.enable_memory_annotations`**: Enables memory-event persistence and memory-context injection for comments and direct messages.
 - **`llm_vision`**: If populated alongside `use_local_diffusion`, agents will actively use the vision backend to look at the generated images when leaving comments or reactions. Ensure the specified model (e.g., `llama3.2-vision`) supports multimodal inputs.

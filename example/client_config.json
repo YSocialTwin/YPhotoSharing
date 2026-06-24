@@ -36,7 +36,18 @@
     },
     "agents": {
       "probability_of_secondary_follow": 0.1,
-      "probability_of_follow_back": 0.1
+      "probability_of_follow_back": 0.1,
+      "churn": {
+        "enabled": false,
+        "churn_probability": 0.0,
+        "inactivity_threshold": 5,
+        "churn_percentage": 0.0
+      },
+      "new_agents": {
+        "enabled": false,
+        "probability_new_agents": 0.0,
+        "percentage_new_agents": 0.0
+      }
     },
     "actions_likelihood": {
         "post_photo": 0.15,
