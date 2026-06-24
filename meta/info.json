@@ -1,0 +1,10 @@
+{
+  "plugin_name": "YPhotoSharing",
+  "category": "Simulation Runtime Stack",
+  "group": "HPC",
+  "description": "Instagram like photo-sharing simulation runtime for YSocial experiments.",
+  "authors": [
+    "YSocialTwin"
+  ],
+  "repository_url": "https://github.com/YSocialTwin/YPhotoSharing"
+}
