@@ -39,6 +39,9 @@
       },
       "stubborn_topics": [],
       "custom_features": {},
+      "probability_of_secondary_follow": 0.15,
+      "probability_of_follow_back": 0.2,
+      "is_churned": false,
       "photo_sharing": {
         "cover_image": "travel_cover.jpg",
         "favorite_filters": ["warm", "vintage"],
@@ -89,6 +92,9 @@
       },
       "stubborn_topics": [],
       "custom_features": {},
+      "probability_of_secondary_follow": 0.1,
+      "probability_of_follow_back": 0.12,
+      "is_churned": false,
       "photo_sharing": {
         "cover_image": "street_cover.jpg",
         "favorite_filters": ["mono", "grain"],
@@ -139,6 +145,9 @@
       },
       "stubborn_topics": [],
       "custom_features": {},
+      "probability_of_secondary_follow": 0.2,
+      "probability_of_follow_back": 0.18,
+      "is_churned": false,
       "photo_sharing": {
         "cover_image": "fitness_cover.jpg",
         "favorite_filters": ["bright", "clean"],
@@ -159,6 +168,9 @@
       "language": "en",
       "round_actions": 3,
       "daily_activity_level": 1,
+      "probability_of_secondary_follow": 0.1,
+      "probability_of_follow_back": 0.1,
+      "is_churned": false,
       "is_private": false,
       "is_verified": false,
       "attention_budget": 100
