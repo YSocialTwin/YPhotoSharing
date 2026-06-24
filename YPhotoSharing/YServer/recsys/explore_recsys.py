@@ -22,6 +22,7 @@ class ExploreRecsys(BaseRecsys):
             UserInterest.user_id == user_id
         ).all()
         user_interest_str = " ".join([ui[0].lower() for ui in user_interests])
+        user_interest_set = {ui[0].lower() for ui in user_interests if ui and ui[0]}
         
         # 2. Get user's persona cluster
         user_row = db.query(User_mgmt.recsys_type).filter(User_mgmt.id == user_id).first()
@@ -50,6 +51,18 @@ class ExploreRecsys(BaseRecsys):
         ranked_candidates = []
         for i, photo in enumerate(candidates):
             score = float(cosine_sim[i]) * 10.0  # Scale up similarity
+
+            photo_topic_overlap = 0.0
+            from YPhotoSharing.YServer.classes.models import PhotoTopic
+            topic_rows = db.query(Interest.interest).join(PhotoTopic, PhotoTopic.topic_id == Interest.iid).filter(
+                PhotoTopic.photo_id == photo["id"]
+            ).all()
+            photo_topic_set = {row[0].lower() for row in topic_rows if row and row[0]}
+            if user_interest_set and photo_topic_set:
+                overlap = user_interest_set.intersection(photo_topic_set)
+                if overlap:
+                    photo_topic_overlap = len(overlap) / float(max(1, len(photo_topic_set)))
+                    score += photo_topic_overlap * 1.5
             
             # Feature: Author Cluster match (mimicking collaborative filtering)
             author_row = db.query(User_mgmt.recsys_type).filter(User_mgmt.id == photo["user_id"]).first()
@@ -59,6 +72,13 @@ class ExploreRecsys(BaseRecsys):
             # Feature: Inherent Virality
             viral_score = photo.get("viral_score", 1.0)
             score += viral_score * 0.2
+
+            sentiment_score = photo.get("sentiment_score")
+            if sentiment_score is not None:
+                try:
+                    score += max(-0.2, min(0.2, float(sentiment_score) * 0.1))
+                except Exception:
+                    pass
             
             # Feature: Trend Momentum (Phase 10)
             import re
