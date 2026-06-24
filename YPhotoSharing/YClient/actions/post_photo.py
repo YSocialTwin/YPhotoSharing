@@ -8,6 +8,7 @@ The LLM generates the caption; the server persists the record.
 import logging
 import uuid
 from typing import Any, Dict, Optional
+
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 
 logger = logging.getLogger(__name__)
@@ -113,13 +114,14 @@ async def post_photo(
     try:
         photo_id = await server.post_photo.remote(photo_data)
         
-        # YSimulator Stage 4: Extract and save emotion
-        try:
-            emotion = await llm_service.extract_emotion.remote(caption)
-            if emotion:
-                await server.add_photo_emotion.remote(photo_id, emotion)
-        except Exception as e:
-            logger.warning(f"Failed to extract emotion for photo {photo_id}: {e}")
+        # Annotation toggles mirror the config options documented in MkDocs.
+        if agent_attrs and agent_attrs.get("enable_emotion_annotation", True):
+            try:
+                emotion = await llm_service.extract_emotion.remote(caption)
+                if emotion:
+                    await server.add_photo_emotion.remote(photo_id, emotion)
+            except Exception as e:
+                logger.warning(f"Failed to extract emotion for photo {photo_id}: {e}")
 
         # Stage 5: Sentiment Annotation
         if agent_attrs and agent_attrs.get("enable_sentiment"):

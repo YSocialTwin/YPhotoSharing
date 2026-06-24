@@ -1,5 +1,10 @@
 import logging
 
+from YPhotoSharing.YClient.actions.dynamics_helpers import (
+    build_memory_context,
+    record_memory_event,
+)
+
 logger = logging.getLogger(__name__)
 
 async def send_dm(
@@ -17,14 +22,16 @@ async def send_dm(
     """
     try:
         agent_attrs = {}
-        # YSimulator Stage 4: Retrieve memory events for this specific recipient
-        # Actually get_memory_events returns all memories. We need to filter or get specific.
         try:
-            memories = await server.get_memory_events.remote(run_id="default", agent_user_id=sender_id, limit=50)
-            recipient_mems = [m for m in memories if m.get("other_user_id") == recipient_id]
-            if recipient_mems:
-                mem_texts = [m.get("event_type", "interaction") for m in recipient_mems[:5]]
-                agent_attrs["memory_context"] = f"Past interactions with this user: {', '.join(mem_texts)}"
+            memory_context = await build_memory_context(
+                server,
+                run_id="default",
+                agent_user_id=sender_id,
+                other_user_id=recipient_id,
+                label="Past interactions with this user",
+            )
+            if memory_context:
+                agent_attrs["memory_context"] = memory_context
         except Exception as e:
             logger.warning(f"Could not retrieve memories for DM: {e}")
 
@@ -37,7 +44,6 @@ async def send_dm(
         
         await server.send_dm.remote(sender_id, recipient_id, content, photo_id)
         
-        # YSimulator Stage 4: Store post-interaction summary
         try:
             event_data = {
                 "run_id": "default",
@@ -47,7 +53,7 @@ async def send_dm(
                 "description": f"Sent DM: {content[:50]}...",
                 "round_id": day * 24 + slot
             }
-            await server.add_memory_event.remote(event_data)
+            await record_memory_event(server, enabled=True, event_data=event_data)
         except Exception as e:
             logger.warning(f"Could not save memory event: {e}")
             

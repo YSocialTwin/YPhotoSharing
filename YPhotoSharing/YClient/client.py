@@ -17,6 +17,10 @@ import ray
 
 from YPhotoSharing.common_utils import build_structured_file_logger, setup_logging
 from YPhotoSharing.YClient.agent_management.agent import Agent
+from YPhotoSharing.YClient.simulation.bootstrap import (
+    build_initial_interest_ids,
+    normalize_agent_config,
+)
 from YPhotoSharing.YClient.simulation.round_planner import SimulationRoundPlanner
 
 logger = logging.getLogger(__name__)
@@ -170,42 +174,16 @@ class SimulationClient:
         """Register agents from user config dicts. Returns number loaded."""
         self._agents = []
         import random
+
         # Stage 6: Initialize Opinions (create a baseline round once)
         init_round_id = await self.server.get_or_create_round.remote(-1, -1)
+        op_dyn = self.simulation_config.get("opinion_dynamics", {})
         for u in user_configs:
-            # Phase 8: Randomly assign 20% to be private accounts
-            if "is_private" not in u:
-                u["is_private"] = random.random() < 0.20
-            
-            # YSimulator Stage 1: Assign activity profile
-            if "activity_profile" not in u:
-                profiles = list(self.simulation_config.get("activity_profiles", {"Always On": ""}).keys())
-                u["activity_profile"] = random.choice(profiles) if profiles else None
-            
-            # YSimulator Stage 1: Assign archetype
-            if "archetype" not in u:
-                arch_cfg = self.simulation_config.get("agent_archetypes", {})
-                if arch_cfg.get("enabled", False):
-                    dist = arch_cfg.get("distribution", {"broadcaster": 0.33, "explorer": 0.34, "validator": 0.33})
-                    keys = list(dist.keys())
-                    weights = list(dist.values())
-                    u["archetype"] = random.choices(keys, weights=weights, k=1)[0]
-                else:
-                    u["archetype"] = None
+            u = normalize_agent_config(u, self.simulation_config)
             # Register user in the database
             try:
                 u["id"] = await self.server.create_user.remote(u)
-                
-                # Stage 6: Initialize Opinions
-                op_dyn = self.simulation_config.get("opinion_dynamics", {})
-                u["enable_opinion_dynamics"] = op_dyn.get("enabled", False)
-                u["enable_sentiment"] = self.simulation_config.get("enable_sentiment", False)
-                
-                # Stage 7: Follow Mechanisms
-                agent_cfg = self.simulation_config.get("agents", {})
-                u["probability_of_secondary_follow"] = agent_cfg.get("probability_of_secondary_follow", 0.1)
-                u["probability_of_follow_back"] = agent_cfg.get("probability_of_follow_back", 0.1)
-                
+
                 if op_dyn.get("enabled", False):
                     topics = self.simulation_config.get("discussion_topics", ["general"])
                     groups = op_dyn.get("opinion_groups", {"Neutral": [0.4, 0.6]})
@@ -213,32 +191,35 @@ class SimulationClient:
                         group = random.choice(list(groups.values()))
                         val = random.uniform(group[0], group[1])
                         await self.server.update_user_opinion.remote(u["id"], topic, val, init_round_id)
-                        
-                # Stage 9: Interest Configuration and Dynamics
+
                 topics = self.simulation_config.get("discussion_topics", ["general"])
                 topic_ids = []
+                topic_lookup = {}
                 for topic in topics:
                     tid = await self.server.get_or_create_interest.remote(topic)
                     topic_ids.append(tid)
-                # Assign interests
-                user_interests = u.get("interests", [])
-                user_interest_ids = []
-                if user_interests:
-                    for t in user_interests:
-                        if t not in topics:
-                            # Register the topic if it's new
-                            tid = await self.server.get_or_create_interest.remote(t)
+                    topic_lookup[topic] = tid
+
+                if u.get("interests"):
+                    user_interest_ids = []
+                    for topic_name in u["interests"]:
+                        if topic_name in topic_lookup:
+                            user_interest_ids.append(topic_lookup[topic_name])
                         else:
-                            tid = topic_ids[topics.index(t)]
-                        user_interest_ids.append(tid)
+                            user_interest_ids.append(
+                                await self.server.get_or_create_interest.remote(topic_name)
+                            )
                 else:
-                    # Fallback Assign 1 to 3 random interests to the user
-                    num_interests = random.randint(1, min(3, max(1, len(topic_ids))))
-                    user_interest_ids = random.sample(topic_ids, num_interests) if topic_ids else []
-                
+                    user_interest_ids = build_initial_interest_ids(
+                        user_config=u,
+                        simulation_config=self.simulation_config,
+                        topic_ids=topic_ids,
+                        topic_lookup=topic_lookup,
+                    )
+
                 # Use the valid init_round_id for initial interests
                 await self.server.set_user_interests.remote(u["id"], user_interest_ids, init_round_id)
-                
+
             except Exception as e:
                 logger.warning(f"Could not register user {u.get('id')} or opinions: {e}")
             weights = self.round_planner.build_action_weights(u)
