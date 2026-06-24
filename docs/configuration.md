@@ -112,6 +112,32 @@ This file controls the agent logic, simulation duration, modalities, and LLM bac
 ## 2.1 `prompts_ygram.json`
 YPhotoSharing relies on an externalized prompt configuration file (`prompts_ygram.json`) placed within your experiment directory. This file dictates the personas, styles, and task-specific constraints for the LLMs. If this file is missing, the simulation will warn and attempt to fall back to an empty dictionary, which will result in LLM errors.
 
+## 2.2 Stress/Reward Configuration
+
+The affective dynamics module accepts a `stress_reward` section either at the top level or under `simulation`. The client normalizes both shapes and forwards the resulting settings to the `StressRewardSystem`.
+
+```json
+{
+  "simulation": {
+    "stress_reward": {
+      "enabled": true,
+      "backward_rounds": 24,
+      "system": {
+        "churn": {
+          "enabled": true,
+          "stress_weight": 1.5,
+          "reward_weight": 1.0
+        }
+      }
+    }
+  }
+}
+```
+
+- **`enabled`**: Turns the stress/reward loop on for eligible interaction paths.
+- **`backward_rounds`**: Controls how many rounds the client queries when reconstructing current affective state.
+- **`system`**: Allows tuning the affective response curves without changing client logic.
+
 ## 3. `users.json`
 
 A list of dictionaries defining the initial agent population. 

@@ -17,6 +17,7 @@ nav:
   - Architecture: architecture.md
   - Configuration: configuration.md
   - Experiments & Presets: experiments.md
+  - YSimulator Alignment: ysimulator_alignment.md
 
 markdown_extensions:
   - admonition

@@ -102,6 +102,7 @@ def main():
         client_id=client_id,
         server_name=server_name,
         namespace=namespace,
+        config_path=str(config_dir),
         llm_config=llm_config,
         prompts_config=prompts_config,
         llm_v_config=llm_v_config,

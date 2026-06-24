@@ -4,6 +4,13 @@ YPhotoSharing is a scalable, distributed research toolkit built on **Ray** and p
 
 The simulator bridges the gap between algorithmic recommendation testing and emergent social behaviors by combining **Machine Learning Recommender Systems** with **Multimodal Agentic Interactions**.
 
+The current implementation has been aligned with the engineering patterns used by `YSimulator` while keeping photo-sharing semantics intact:
+
+- photo posts persist their topic associations in `photo_topics`
+- actor logs are written to `logs/execution_client.log` and `logs/execution_server.log`
+- stress/reward is configured and persisted through the dedicated server table
+- client-side round orchestration is split from scheduling helpers
+
 ---
 
 ## 🎯 Key Features
@@ -13,6 +20,7 @@ The simulator bridges the gap between algorithmic recommendation testing and eme
 - **Advanced Platform Dynamics**: Emulates real-world constraints like finite attention budgets, user churn based on satisfaction, and hashtag trend velocity.
 - **Distributed Architecture**: Scales horizontally via **Ray**, decoupling the global state (`OrchestratorServer`) from the agent execution pools (`SimulationClient`).
 - **Multimodal Content**: Agents can generate real images locally via Stable Diffusion and use Vision LLMs to critique and comment on generated content.
+- **Affective Dynamics**: Stress/reward feedback loops track how reactions, comments, shares, and reports affect creators over time.
 
 ---
 
@@ -97,6 +105,15 @@ YPhotoSharing requires at least two separate processes: the central **Orchestrat
 
 *(For multi-node setups, you can launch multiple `run_client.py` instances with distinct client IDs in their config files. The Server will barrier-sync them at the end of every simulated hour).*
 
+### Logging and Diagnostics
+
+Execution logs are stored under the experiment directory:
+
+- `logs/execution_client.log`
+- `logs/execution_server.log`
+
+These files are created by the Ray actors themselves, so they contain runtime events instead of only launcher output.
+
 ---
 
 ## 📊 Analytics & Exports
@@ -118,3 +135,5 @@ For deeper technical references, architecture overviews, and preset experimental
 mkdocs serve
 ```
 Then navigate to `http://127.0.0.1:8000` in your browser.
+
+For the alignment analysis and the phased implementation plan, see [`docs/ysimulator_alignment.md`](docs/ysimulator_alignment.md).

@@ -53,3 +53,10 @@ python run_client.py --config example
 
 ### 4. Viewing Results
 As the simulation progresses, you will see output logging the agent actions. At any time, you can query the `example/yphotosharing.db` SQLite database to view the generated posts, comments, follower graphs, and analytical metrics.
+
+If you are running the aligned Ray actors, also inspect:
+
+- `example/logs/execution_client.log`
+- `example/logs/execution_server.log`
+
+Those files capture the runtime events emitted from inside the actors rather than just launcher output.

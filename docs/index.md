@@ -20,3 +20,7 @@ The simulator bridges the gap between algorithmic recommendation testing and eme
 - **Privacy & Moderation**: Fully implemented private accounts, follow request queues reviewed by LLMs, and shadow-banning for toxic content.
 
 Explore the sidebar to get started with running your own simulations and experimenting with the ecosystem!
+
+## Additional Reading
+
+- [YPhotoSharing vs YSimulator Alignment Analysis](ysimulator_alignment.md)
