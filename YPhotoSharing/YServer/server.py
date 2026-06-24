@@ -32,6 +32,7 @@ from YPhotoSharing.YServer.services.analytics_service import AnalyticsService
 from YPhotoSharing.YServer.services.media_service import MediaService
 from YPhotoSharing.YServer.services.social_action_service import SocialActionService
 from YPhotoSharing.YServer.recsys.follow_recsys import FollowRecsys
+from YPhotoSharing.YServer.repositories.social_action_repository import SocialActionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,11 @@ class OrchestratorServer:
         self.moderation_service = ModerationService(self._db)
         self.analytics_service = AnalyticsService(self._db)
         self.media_service = MediaService()
-        self.social_action_service = SocialActionService(self._db, logger=logger)
+        self.social_action_repository = SocialActionRepository(self._db)
+        self.social_action_service = SocialActionService(
+            repository=self.social_action_repository,
+            logger=logger,
+        )
 
         # Initialize YSimulator Managers
         from YPhotoSharing.YServer.interests_modeling.interest_manager import InterestManager
