@@ -39,5 +39,9 @@
     "evaluate_opinion": {
         "system_template": "You are evaluating opinions on various topics. Consider the content, the author's stance, and your own perspective when forming your judgment.",
         "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\nConsidering your current opinion score of {current_opinion} on the topic '{topic}', how does this post affect your opinion? Reply ONLY with a new opinion score between 0.0 and 1.0 (e.g., 0.65)."
+    },
+    "evaluate_opinion_transition": {
+        "system_template": "You are evaluating opinions using a discrete Likert scale. You must respond with exactly one of: AGREE, DISAGREE, or NEUTRAL.",
+        "user_template": "Topic: {topic}\n\nCurrent opinion class: {current_label}\nAuthor opinion class: {author_label}\nOpinion scale: {opinion_scale}\n\nPost:\n{post_content}\n\nIf the post should move the current opinion one adjacent step toward the author, reply AGREE. If it should move one adjacent step away, reply DISAGREE. If it should stay in the same class, reply NEUTRAL.\n"
     }
 }

@@ -98,7 +98,8 @@ class OpinionHandler:
         Returns:
             Latest opinion value or None if not found
         """
-        return self.db.get_latest_agent_opinion(agent_id, topic_id)
+        topic_name = self._resolve_topic_name(topic_id) or topic_id
+        return self.db.get_latest_agent_opinion(agent_id, topic_name)
 
     def add_opinion(
         self,
@@ -122,8 +123,15 @@ class OpinionHandler:
             True if successful, False otherwise
         """
         current_round_id = self._get_current_round_id()
+        topic_name = self._resolve_topic_name(topic_id) or topic_id
         return self.db.add_agent_opinion(
-            agent_id, current_round_id, topic_id, opinion, id_interacted_with, id_post
+            user_id=agent_id,
+            round_id=current_round_id,
+            topic=topic_name,
+            opinion_score=opinion,
+            id_interacted_with=id_interacted_with,
+            id_post=id_post,
+            topic_id=topic_id,
         )
 
     def get_neighbors_opinions(self, agent_id: str, topic_id: str) -> List[float]:

@@ -28,6 +28,7 @@ from YPhotoSharing.YServer.classes.models import (
     MemoryInteractionEvent,
     MemorySocialCard,
     Mention,
+    OpinionPath,
     Photo,
     PhotoEmotion,
     PhotoHashtag,
@@ -669,13 +670,39 @@ class DatabaseMiddleware:
                 return True
             return False
 
-    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
+    def update_user_opinion(
+        self,
+        user_id: str,
+        topic: str,
+        opinion_score: float,
+        round_id: str,
+        topic_id: Optional[str] = None,
+        opinion_label: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> bool:
         with self.session_scope() as s:
             op = s.query(UserOpinion).filter_by(user_id=user_id, topic=topic, round_id=round_id).first()
             if op:
                 op.opinion_score = opinion_score
+                if topic_id is not None:
+                    op.topic_id = topic_id
+                if opinion_label is not None:
+                    op.opinion_label = opinion_label
+                if model_name is not None:
+                    op.model_name = model_name
             else:
-                s.add(UserOpinion(id=str(uuid.uuid4()), user_id=user_id, topic=topic, round_id=round_id, opinion_score=opinion_score))
+                s.add(
+                    UserOpinion(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        topic=topic,
+                        topic_id=topic_id,
+                        round_id=round_id,
+                        opinion_score=opinion_score,
+                        opinion_label=opinion_label,
+                        model_name=model_name,
+                    )
+                )
             return True
 
     def get_user_opinions(self, user_id: str) -> dict:
@@ -687,6 +714,14 @@ class DatabaseMiddleware:
                 if op.topic not in result:
                     result[op.topic] = op.opinion_score
             return result
+
+    def get_opinion_paths(self, user_id: str, topic: Optional[str] = None, limit: int = 100) -> List[dict]:
+        with self.session_scope() as s:
+            query = s.query(OpinionPath).filter_by(user_id=user_id)
+            if topic is not None:
+                query = query.filter_by(topic=topic)
+            rows = query.order_by(OpinionPath.created_at.desc()).limit(limit).all()
+            return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows]
 
     # --- Integration Methods for Coordination, Interest Modeling, Opinion Dynamics ---
 
@@ -715,8 +750,46 @@ class DatabaseMiddleware:
             s.add(PhotoTopic(id=str(uuid.uuid4()), photo_id=photo_id, topic_id=topic_id))
             return True
 
-    def compute_interest_counts_in_window(self, agent_id: str, window_rounds: list) -> dict:
-        return {}
+    def compute_interest_counts_in_window(
+        self,
+        agent_id: str,
+        current_round_id: str,
+        attention_window: int,
+    ) -> dict:
+        from YPhotoSharing.YServer.classes.models import UserInterest
+
+        with self.session_scope() as s:
+            current_round = s.query(Round).filter_by(id=str(current_round_id)).first()
+            if current_round is None:
+                return {}
+
+            window_size = max(1, int(attention_window or 1))
+            window_rounds = (
+                s.query(Round.id)
+                .filter(
+                    or_(
+                        Round.day < current_round.day,
+                        and_(Round.day == current_round.day, Round.hour <= current_round.hour),
+                    )
+                )
+                .order_by(Round.day.desc(), Round.hour.desc())
+                .limit(window_size)
+                .all()
+            )
+            round_ids = [row[0] for row in window_rounds]
+            if not round_ids:
+                return {}
+
+            rows = (
+                s.query(UserInterest.interest_id, func.count(UserInterest.id))
+                .filter(
+                    UserInterest.user_id == str(agent_id),
+                    UserInterest.round_id.in_(round_ids),
+                )
+                .group_by(UserInterest.interest_id)
+                .all()
+            )
+            return {interest_id: int(count or 0) for interest_id, count in rows}
 
     def add_or_get_interests_batch(self, topics: list) -> dict:
         res = {}
@@ -741,11 +814,84 @@ class DatabaseMiddleware:
 
     def get_latest_agent_opinion(self, agent_id: str, topic: str) -> Optional[float]:
         with self.session_scope() as s:
-            op = s.query(UserOpinion).filter_by(user_id=agent_id, topic=topic).order_by(UserOpinion.round_id.desc()).first()
+            topic_row = s.query(Interest).filter((Interest.iid == topic) | (Interest.interest == topic)).first()
+            topic_id = topic_row.iid if topic_row else None
+            topic_name = topic_row.interest if topic_row else topic
+            query = s.query(UserOpinion).filter(UserOpinion.user_id == agent_id)
+            if topic_id:
+                query = query.filter((UserOpinion.topic_id == topic_id) | (UserOpinion.topic == topic_name))
+            else:
+                query = query.filter(UserOpinion.topic == topic_name)
+            op = (
+                query.join(Round, UserOpinion.round_id == Round.id)
+                .order_by(Round.day.desc(), Round.hour.desc())
+                .first()
+            )
             return op.opinion_score if op else None
 
-    def add_agent_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
-        return self.update_user_opinion(user_id, topic, opinion_score, round_id)
+    def add_agent_opinion(
+        self,
+        user_id: str,
+        round_id: str,
+        topic: str,
+        opinion_score: float,
+        id_interacted_with: Optional[str] = None,
+        id_post: Optional[str] = None,
+        topic_id: Optional[str] = None,
+        opinion_label: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ) -> bool:
+        return self.update_user_opinion(
+            user_id=user_id,
+            topic=topic,
+            opinion_score=opinion_score,
+            round_id=round_id,
+            topic_id=topic_id,
+            opinion_label=opinion_label,
+            model_name=model_name,
+        )
+
+    def record_opinion_path(
+        self,
+        user_id: str,
+        topic: str,
+        round_id: str,
+        model_name: str,
+        source_score: Optional[float],
+        source_label: Optional[str],
+        target_score: float,
+        target_label: Optional[str],
+        transition: str,
+        direction: Optional[str] = None,
+        evaluation_scope: Optional[str] = None,
+        topic_id: Optional[str] = None,
+        parent_post_id: Optional[str] = None,
+        actor_user_id: Optional[str] = None,
+        payload_json: Optional[str] = None,
+    ) -> str:
+        with self.session_scope() as s:
+            pid = str(uuid.uuid4())
+            s.add(
+                OpinionPath(
+                    id=pid,
+                    user_id=user_id,
+                    topic_id=topic_id,
+                    topic=topic,
+                    round_id=round_id,
+                    model_name=model_name,
+                    evaluation_scope=evaluation_scope,
+                    source_score=source_score,
+                    source_label=source_label,
+                    target_score=target_score,
+                    target_label=target_label,
+                    transition=transition,
+                    direction=direction,
+                    parent_post_id=parent_post_id,
+                    actor_user_id=actor_user_id,
+                    payload_json=payload_json,
+                )
+            )
+            return pid
 
     def update_user_archetype(self, user_id: str, archetype: str) -> bool:
         with self.session_scope() as s:

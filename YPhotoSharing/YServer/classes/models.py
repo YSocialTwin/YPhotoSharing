@@ -730,12 +730,55 @@ class UserOpinion(Base):
 
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True)
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"), nullable=True, index=True)
     topic = Column(String(128), nullable=False, index=True)
     round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
     opinion_score = Column(Float, nullable=False, default=0.5)
+    opinion_label = Column(String(64), nullable=True)
+    model_name = Column(String(32), nullable=True)
 
     user = relationship("User_mgmt", backref=backref("opinions", cascade="all, delete-orphan"))
     round_obj = relationship("Round")
+    topic_obj = relationship("Interest")
+
+
+class OpinionPath(Base):
+    """Discrete opinion transition trace for a single interaction."""
+
+    __tablename__ = "opinion_paths"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "topic",
+            "round_id",
+            "source_score",
+            "target_score",
+            "transition",
+            name="uq_opinion_path_transition",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True)
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"), nullable=True, index=True)
+    topic = Column(String(128), nullable=False, index=True)
+    round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_name = Column(String(32), nullable=False)
+    evaluation_scope = Column(String(32), nullable=True)
+    source_score = Column(Float, nullable=True)
+    source_label = Column(String(64), nullable=True)
+    target_score = Column(Float, nullable=False)
+    target_label = Column(String(64), nullable=True)
+    transition = Column(String(32), nullable=False)
+    direction = Column(String(16), nullable=True)
+    parent_post_id = Column(String(36), nullable=True, index=True)
+    actor_user_id = Column(String(36), nullable=True, index=True)
+    payload_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User_mgmt", backref=backref("opinion_paths", cascade="all, delete-orphan"))
+    round_obj = relationship("Round")
+    topic_obj = relationship("Interest")
 
 
 class StressReward(Base):

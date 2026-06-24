@@ -92,8 +92,36 @@ async def reply_comment(
                     parent_post_data=photo,
                 )
                 if updates:
-                    for topic_name, new_val in updates.items():
-                        await server.update_user_opinion.remote(user_id, topic_name, new_val, round_id)
+                    for topic_id, new_val in updates.items():
+                        event = getattr(opinion_manager.calculator, "last_update_events", {}).get(topic_id, {})
+                        topic_name = event.get("topic_name", topic_id)
+                        await server.update_user_opinion.remote(
+                            user_id,
+                            topic_name,
+                            new_val,
+                            round_id,
+                            topic_id=topic_id,
+                            opinion_label=event.get("target_label"),
+                            model_name=event.get("model_name"),
+                        )
+                        if event:
+                            await server.record_opinion_path.remote(
+                                user_id,
+                                topic_name,
+                                round_id,
+                                event.get("model_name", "bounded_confidence"),
+                                event.get("source_score"),
+                                event.get("source_label"),
+                                event.get("target_score", new_val),
+                                event.get("target_label"),
+                                event.get("transition", "neutral"),
+                                direction=event.get("direction"),
+                                evaluation_scope=event.get("evaluation_scope"),
+                                topic_id=topic_id,
+                                parent_post_id=photo_id,
+                                actor_user_id=user_id,
+                                payload_json=None,
+                            )
             except Exception as e:
                 logger.warning(f"Failed to process opinion dynamics in reply_comment: {e}")
 

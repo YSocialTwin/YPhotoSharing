@@ -50,6 +50,7 @@ class OpinionCalculator:
         self.client_id = client_id
         self.logger = logger
         self.get_opinion_group_fn = get_opinion_group_fn
+        self.last_update_events: Dict[str, dict] = {}
 
     def calculate_updates(
         self,
@@ -78,6 +79,8 @@ class OpinionCalculator:
             # Check if opinion dynamics config exists
             if not self.opinion_config:
                 return None
+
+            self.last_update_events = {}
 
             # Get model name and parameters
             model_name = self.opinion_config.get("model_name", "bounded_confidence")
@@ -168,6 +171,26 @@ class OpinionCalculator:
                     )
 
                 updated_opinions[topic_id] = new_opinion
+                self.last_update_events[topic_id] = {
+                    "topic_id": topic_id,
+                    "topic_name": topic_name,
+                    "model_name": model_name,
+                    "evaluation_scope": params.get("evaluation_scope", "interlocutor_only"),
+                    "source_score": agent_opinion,
+                    "source_label": self.get_opinion_group_fn(agent_opinion)
+                    if agent_opinion is not None
+                    else None,
+                    "target_score": new_opinion,
+                    "target_label": self.get_opinion_group_fn(new_opinion),
+                    "transition": self._transition_from_scores(agent_opinion, new_opinion),
+                    "direction": self._transition_direction(agent_opinion, new_opinion),
+                    "author_score": author_opinion,
+                    "author_label": self.get_opinion_group_fn(author_opinion)
+                    if author_opinion is not None
+                    else None,
+                    "parent_post_id": parent_post_id,
+                    "actor_user_id": agent_id,
+                }
 
                 self.logger.info(
                     f"Opinion update calculated (model={model_name}): agent={agent_id}, "
@@ -240,19 +263,19 @@ class OpinionCalculator:
 
         if evaluation_scope == "neighbors":
             # Get neighbors' opinions from server
-            neighbor_opinion_values = ray.get(
-                self.server.get_neighbors_opinions.remote(
-                    agent_id, topic_id, client_id=self.client_id
+                neighbor_opinion_values = ray.get(
+                    self.server.get_neighbors_opinions.remote(
+                        agent_id, topic_id, client_id=self.client_id
+                    )
                 )
-            )
 
-            if neighbor_opinion_values:
-                # Convert to opinion labels and count occurrences
-                opinion_groups = self.opinion_config.get("opinion_groups", {})
-                neighbor_labels = [
-                    get_opinion_group(val, opinion_groups) for val in neighbor_opinion_values
-                ]
-                peers_opinions = list(Counter(neighbor_labels).items())
+                if neighbor_opinion_values:
+                    # Convert to opinion labels and count occurrences
+                    opinion_groups = self.opinion_config.get("opinion_groups", {})
+                    neighbor_labels = [
+                        get_opinion_group(val, opinion_groups) for val in neighbor_opinion_values
+                    ]
+                    peers_opinions = list(Counter(neighbor_labels).items())
 
         # Calculate new opinion using LLM evaluation
         return llm_evaluation(
@@ -260,6 +283,7 @@ class OpinionCalculator:
             y=author_opinion,
             text=post_content,
             topic=topic_name,
+            author_name=parent_post_data.get("username") or parent_author_id,
             evaluation_scope=evaluation_scope,
             cold_start=params.get("cold_start", "neutral"),
             group_classes=self.opinion_config.get("opinion_groups", {}),
@@ -267,3 +291,21 @@ class OpinionCalculator:
             llm_manager=self.llm_manager,
             agent_id=agent_id,
         )
+
+    def _transition_from_scores(self, source_score: Optional[float], target_score: Optional[float]) -> str:
+        if source_score is None or target_score is None:
+            return "cold_start"
+        if target_score > source_score:
+            return "agree"
+        if target_score < source_score:
+            return "disagree"
+        return "neutral"
+
+    def _transition_direction(self, source_score: Optional[float], target_score: Optional[float]) -> Optional[str]:
+        if source_score is None or target_score is None:
+            return None
+        if target_score > source_score:
+            return "toward"
+        if target_score < source_score:
+            return "away"
+        return "stay"

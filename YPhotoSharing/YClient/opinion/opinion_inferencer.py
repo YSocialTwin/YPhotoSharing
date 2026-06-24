@@ -102,15 +102,20 @@ class OpinionInferencer:
             return random.random()
 
         # Call LLM service to infer opinion
-        opinion_value = ray.get(
+        opinion_label = ray.get(
             self.llm_manager.infer_photo_opinion.remote(
                 photo_content, topic_name, opinion_groups, agent_id
             )
         )
 
+        opinion_value = random.random()
+        bounds = opinion_groups.get(opinion_label)
+        if bounds and len(bounds) == 2:
+            opinion_value = (float(bounds[0]) + float(bounds[1])) / 2
+
         self.logger.info(
             f"LLM page agent {agent_id}: inferred opinion {opinion_value} "
-            f"on topic '{topic_name}' from photo content"
+            f"({opinion_label}) on topic '{topic_name}' from photo content"
         )
 
         return opinion_value
