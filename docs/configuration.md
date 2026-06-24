@@ -126,16 +126,23 @@ Opinion updates are persisted in two layers:
 Both the launcher and the Ray actors use YSimulator-style structured execution logs:
 
 - client execution logs are written to `logs/<client_id>_execution.log`
-- server execution logs are written to `logs/<server_name>.log`
+- server execution logs are written to `logs/<server_name>_server.log`
+- actor logs are written to `logs/<client_id>_actor.log` and `logs/<server_name>_actor.log`
+- server request traces are written to `logs/_server.log`
+- client LLM usage traces are written to `logs/<client_id>_llm_usage.log`
 - rotated logs are compressed with gzip and keep the same JSON content structure as YSimulator
+- request and usage streams are newline-delimited JSON records with simulator-compatible payloads
 
 Supported logging keys are:
 
 - `logging.enable_console_log`
 - `logging.enable_execution_log` for the client
 - `logging.enable_server_log` for the server
+- `logging.enable_actor_log` for the shared actor-side structured stream
+- `logging.enable_request_log` for the server request trace stream
 - `logging.enable_action_log` for the client action summary stream
 - `logging.enable_prompt_log` for the client prompt trace stream
+- `logging.enable_llm_usage_log` for the client LLM usage stream
 
 For a compact summary of the annotation toggles, see
 [Annotations](annotations.md).

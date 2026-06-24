@@ -7,7 +7,10 @@ The simulator bridges the gap between algorithmic recommendation testing and eme
 The current implementation has been aligned with the engineering patterns used by `YSimulator` while keeping photo-sharing semantics intact:
 
 - photo posts persist their topic associations in `photo_topics`
-- actor logs are written to `logs/<client_id>_execution.log` and `logs/<server_name>.log`
+- actor logs are written to `logs/<client_id>_actor.log` and `logs/<server_name>_actor.log`
+- execution logs are written to `logs/<client_id>_execution.log` and `logs/<server_name>_server.log`
+- server request traces are written to `logs/_server.log`
+- client LLM usage traces are written to `logs/<client_id>_llm_usage.log`
 - stress/reward is configured and persisted through the dedicated server table
 - client-side round orchestration is split from scheduling helpers
 - annotation toggles are documented for emotion, sentiment, and memory
@@ -111,9 +114,13 @@ YPhotoSharing requires at least two separate processes: the central **Orchestrat
 Execution logs are stored under the experiment directory:
 
 - `logs/<client_id>_execution.log`
-- `logs/<server_name>.log`
+- `logs/<server_name>_server.log`
+- `logs/<client_id>_actor.log`
+- `logs/<server_name>_actor.log`
+- `logs/_server.log`
+- `logs/<client_id>_llm_usage.log`
 
-These files are created by the Ray actors themselves, are gzip-rotated, and contain structured JSON records with `timestamp`, `level`, `message`, `module`, `function`, and `line` fields. Extra fields such as `execution_time_ms` and `extra_data` are preserved when present.
+These files are created by the Ray actors themselves, are gzip-rotated, and contain structured JSON records with `timestamp`, `level`, `message`, `module`, `function`, and `line` fields where applicable. The request and usage streams are newline-delimited JSON records with simulator-compatible payloads.
 
 If enabled in `client_config.json`, the client also writes:
 
@@ -143,5 +150,6 @@ mkdocs serve
 Then navigate to `http://127.0.0.1:8000` in your browser.
 
 For the alignment analysis and the phased implementation plan, see [`docs/ysimulator_alignment.md`](docs/ysimulator_alignment.md).
+For logging details and configuration switches, see [`docs/logging.md`](docs/logging.md).
 For annotation configuration details, see [`docs/annotations.md`](docs/annotations.md).
 For recommendation behavior and ranking signals, see [`docs/recommendations.md`](docs/recommendations.md).

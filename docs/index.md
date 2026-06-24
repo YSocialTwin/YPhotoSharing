@@ -24,5 +24,6 @@ Explore the sidebar to get started with running your own simulations and experim
 ## Additional Reading
 
 - [YPhotoSharing vs YSimulator Alignment Analysis](ysimulator_alignment.md)
+- [Logging and Diagnostics](logging.md)
 - [Recommendation Signals and Ranking](recommendations.md)
 - [Annotation Controls](annotations.md)

@@ -138,6 +138,7 @@ The following items are already handled and should not be reworked unless a
 regression appears:
 
 - structured execution logging from the Ray actors
+- actor-side request traces and LLM usage logs
 - optional action and prompt logs
 - bounded-confidence opinion updates
 - discrete LLM-based opinion transitions

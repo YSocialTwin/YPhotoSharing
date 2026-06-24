@@ -17,6 +17,19 @@ Place these keys under `simulation` in `client_config.json`:
 }
 ```
 
+That same block can be combined with the logging flags that expose the
+debugging streams used by the client:
+
+```json
+{
+  "logging": {
+    "enable_action_log": true,
+    "enable_prompt_log": true,
+    "enable_llm_usage_log": true
+  }
+}
+```
+
 - `enable_emotion_annotation`: stores the dominant visual emotion for new
   photos in `photo_emotions`
 - `enable_sentiment`: stores a numeric sentiment score for photos and
@@ -37,6 +50,7 @@ Place these keys under `simulation` in `client_config.json`:
 
 - `logging.enable_action_log` enables per-client action summaries
 - `logging.enable_prompt_log` enables per-client prompt traces
+- `logging.enable_llm_usage_log` enables per-client LLM usage accounting
 - `stress_reward.enabled` enables the affective feedback loop
 - `simulation.opinion_dynamics.enabled` enables bounded-confidence or
   discrete LLM opinion updates

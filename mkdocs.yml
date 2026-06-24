@@ -16,6 +16,7 @@ nav:
   - Getting Started: getting_started.md
   - Architecture: architecture.md
   - Configuration: configuration.md
+  - Logging: logging.md
   - Annotations: annotations.md
   - Recommendations: recommendations.md
   - Service Description: Service_description.md

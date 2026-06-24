@@ -38,8 +38,8 @@ modular and has a few intentionally open refactoring seams:
 - the server layer still acts as a large façade over the DB middleware
 - several DB helpers are still concentrated in `db_middleware.py` instead of
   being split into repository-style components
-- logging now emits structured execution, action, and prompt records from the
-  Ray actors
+- logging now emits structured execution, actor, request, usage, action, and
+  prompt records from the Ray actors
 - the advanced stress/reward mechanic is integrated across the supported
   social-feedback paths, but it remains more distributed than in YSimulator
 - topic propagation is now persisted, but the surrounding service structure is
@@ -213,8 +213,9 @@ interactions, but some differences remain:
 - request logs
 - structured records
 
-`YPhotoSharing` now emits structured execution logs from the actors and can
-also emit optional action and prompt logs when enabled.
+`YPhotoSharing` now emits structured execution logs, actor logs, server
+request traces, and LLM usage traces, while still supporting optional action
+and prompt logs when enabled.
 
 ---
 
@@ -266,10 +267,11 @@ What this means:
 
 Observed issues:
 
-- execution logs are now populated from inside the Ray actors
+- execution logs, actor logs, request traces, and LLM usage traces are now
+  populated from inside the Ray actors
 - the remaining parity gap is breadth: YSimulator also keeps separate action
   logs and prompt logs
-- a future parity step should add those secondary log streams only if they are
+- a future parity step should keep those secondary log streams only if they are
   genuinely useful for YPhotoSharing debugging and analysis
 
 What this means:
