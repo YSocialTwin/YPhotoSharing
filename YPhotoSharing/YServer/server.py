@@ -14,14 +14,17 @@ Only this module (and DatabaseMiddleware) touches the database directly.
 
 import json
 import logging
+import functools
 import time
 import uuid
+import inspect
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
 
-from YPhotoSharing.common_utils import setup_logging
+from YPhotoSharing.common_utils import build_json_line_file_logger, setup_logging
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 from YPhotoSharing.YServer.services.recommendation_service import RecommendationService
 from YPhotoSharing.YServer.services.photo_enrichment_service import PhotoEnrichmentService
@@ -37,7 +40,6 @@ from YPhotoSharing.YServer.repositories.social_action_repository import SocialAc
 logger = logging.getLogger(__name__)
 
 
-@ray.remote
 class OrchestratorServer:
     """
     Ray remote actor – the sole DB-facing component.
@@ -68,6 +70,7 @@ class OrchestratorServer:
         self._current_hour = 0
         self._run_id = str(uuid.uuid4())
         self._start_time = time.time()
+        self.current_round_id = None
 
         global logger
         logger = setup_logging(
@@ -77,6 +80,15 @@ class OrchestratorServer:
             instance_name=self.server_name,
         )
         self.logger = logger
+
+        logging_config = self.simulation_config.get("logging", {}) or {}
+        self.request_logger = None
+        if logging_config.get("enable_request_log", True):
+            self.request_logger = build_json_line_file_logger(
+                f"YPhotoSharing.Server.Requests.{self.server_name}",
+                Path(config_path) / "logs" / "_server.log",
+                propagate=False,
+            )
 
         # Database – server-exclusive
         self._db = DatabaseMiddleware(db_config, config_path)
@@ -125,8 +137,6 @@ class OrchestratorServer:
             logger=logger
         )
         self.client_manager = ClientManager(timeout_seconds=self.timeout_seconds, logger=logger)
-
-        self.current_round_id = None
 
         logger.info(f"OrchestratorServer '{server_name}' ready (run_id={self._run_id})")
 
@@ -177,6 +187,7 @@ class OrchestratorServer:
             self._current_hour = 0
             self._current_day += 1
         round_id = self._db.get_or_create_round(self._current_day, self._current_hour)
+        self.current_round_id = round_id
         
         # Phase 3: Enrich photos missing alt_text and embeddings
         self.photo_enrichment_service.enrich_photos()
@@ -211,7 +222,9 @@ class OrchestratorServer:
     # ------------------------------------------------------------------
 
     def get_or_create_round(self, day: int, hour: int) -> str:
-        return self._db.get_or_create_round(day, hour)
+        round_id = self._db.get_or_create_round(day, hour)
+        self.current_round_id = round_id
+        return round_id
 
     # ------------------------------------------------------------------
     # User management
@@ -489,3 +502,70 @@ class OrchestratorServer:
         self, user_id: str, round_id: str, variations: list, action_name: Optional[str] = None
     ) -> int:
         return self._db.set_stress_reward_variations(user_id, round_id, variations, action_name)
+
+
+def log_server_request(func):
+    """Log public server method calls to the dedicated request log."""
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        request_id = f"{time.time()}-{uuid.uuid4().hex[:10]}"
+        client_name = kwargs.get("client_id")
+        if not client_name and args:
+            try:
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters.keys())
+                if len(param_names) > 1 and param_names[1] == "client_id" and isinstance(args[0], str):
+                    client_name = args[0]
+            except (TypeError, ValueError):
+                pass
+        if not client_name:
+            client_name = "unknown"
+
+        start_time = time.time()
+        status_code = 200
+        error = None
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as exc:
+            status_code = 500
+            error = str(exc)
+            raise
+        finally:
+            duration = time.time() - start_time
+            log_entry = {
+                "request_id": request_id,
+                "client_name": client_name,
+                "path": func.__name__,
+                "status_code": status_code,
+                "duration": duration,
+                "time": datetime.now(timezone.utc).isoformat(),
+                "tid": getattr(self, "current_round_id", None),
+                "day": getattr(self, "_current_day", None),
+                "hour": getattr(self, "_current_hour", None),
+            }
+            if error:
+                log_entry["error"] = error
+
+            try:
+                request_logger = getattr(self, "request_logger", None)
+                if request_logger:
+                    request_logger.info(json.dumps(log_entry))
+                    for handler in request_logger.handlers:
+                        handler.flush()
+            except Exception as log_error:
+                getattr(self, "logger", logger).error(f"Server request logging failed: {log_error}")
+
+    return wrapper
+
+
+def _wrap_server_methods(cls):
+    for name, attr in list(vars(cls).items()):
+        if name.startswith("_") or name == "__init__":
+            continue
+        if callable(attr):
+            setattr(cls, name, log_server_request(attr))
+    return cls
+
+
+OrchestratorServer = ray.remote(_wrap_server_methods(OrchestratorServer))

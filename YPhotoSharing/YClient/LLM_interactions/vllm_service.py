@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 import ray
 
+from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
+
 logger = logging.getLogger(__name__)
 
 _VLLM_AVAILABLE = False
@@ -29,6 +31,13 @@ def _require_vllm():
             "vLLM is not installed.  Install it with: pip install vllm\n"
             "Note: vLLM requires CUDA and a supported GPU."
         )
+
+
+def _estimate_tokens_from_text(*parts: Any) -> int:
+    text = " ".join(str(part) for part in parts if part is not None).strip()
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
 
 
 @ray.remote(num_gpus=1)
@@ -61,6 +70,17 @@ class VLLMService:
         }
         self.prompts_config = prompts_config or {}
         self.model_name = llm_config.get("model", "meta-llama/Llama-3.2-1B-Instruct")
+        log_dir = os.path.expanduser(
+            str((logging_config or {}).get("log_dir", "."))
+        )
+        instance_name = str((logging_config or {}).get("instance_name", "client"))
+        self.usage_tracker = None
+        if (logging_config or {}).get("enable_llm_usage_log", True):
+            self.usage_tracker = LLMUsageTracker(
+                logger=logging.getLogger(f"YPhotoSharing.LLMUsage.{instance_name}"),
+                log_file_path=os.path.join(log_dir, f"{instance_name}_llm_usage.log"),
+                enable_file_logging=True,
+            )
 
         self.sampling_params = SamplingParams(
             temperature=llm_config.get("temperature", 0.7),
@@ -92,17 +112,38 @@ class VLLMService:
                 trust_remote_code=llm_v_config.get("trust_remote_code", False),
             )
 
+        if self.usage_tracker:
+            gpu_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+            self.usage_tracker.log_gpu_selection(
+                {
+                    "physical_gpu_id": gpu_visible,
+                    "logical_gpu_id": 0 if gpu_visible else None,
+                    "assignment_method": "ray_assigned",
+                    "cuda_visible_devices": gpu_visible,
+                },
+                model_name=self.model_name,
+                backend="vllm",
+            )
+
         logger.info(f"VLLMService initialised with model={self.model_name}")
 
     # ------------------------------------------------------------------
     # Batch helpers
     # ------------------------------------------------------------------
 
-    def _batch_generate(self, prompts: List[str]) -> List[str]:
+    def _batch_generate(self, prompts: List[str], *, method_name: str = "generate") -> List[str]:
         if not prompts:
             return []
         outputs = self.llm.generate(prompts, self.sampling_params)
-        return [out.outputs[0].text.strip() for out in outputs]
+        texts = [out.outputs[0].text.strip() for out in outputs]
+        if self.usage_tracker:
+            for prompt_text, result_text in zip(prompts, texts):
+                self.usage_tracker.record_call(
+                    method_name,
+                    input_tokens=_estimate_tokens_from_text(prompt_text),
+                    output_tokens=_estimate_tokens_from_text(result_text),
+                )
+        return texts
 
     # ------------------------------------------------------------------
     # Public API (mirrors LLMService)
@@ -114,7 +155,7 @@ class VLLMService:
             f"Write an Instagram caption for a photo about: {topic}. "
             f"Day {day}, slot {slot}. Max 30 words. Add 2-3 hashtags."
         )
-        results = self._batch_generate([prompt])
+        results = self._batch_generate([prompt], method_name="generate_caption")
         return results[0] if results else ""
 
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
@@ -125,14 +166,14 @@ class VLLMService:
             )
             for r in requests
         ]
-        return self._batch_generate(prompts)
+        return self._batch_generate(prompts, method_name="generate_caption")
 
     def decide_reaction(self, caption: str, cluster_id: int = 0) -> str:
         prompt = (
             f"Read this Instagram caption and reply ONLY with one word: "
             f"LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {caption}"
         )
-        results = self._batch_generate([prompt])
+        results = self._batch_generate([prompt], method_name="decide_reaction")
         result = results[0].upper() if results else "LIKE"
         allowed = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
         return result if result in allowed else "LIKE"
@@ -145,7 +186,7 @@ class VLLMService:
             )
             for r in requests
         ]
-        results = self._batch_generate(prompts)
+        results = self._batch_generate(prompts, method_name="decide_reaction")
         allowed = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
         return [r.upper() if r.upper() in allowed else "LIKE" for r in results]
 
@@ -156,7 +197,7 @@ class VLLMService:
             f"Write a brief Instagram comment (under 100 characters). "
             f"You may @mention the author."
         )
-        results = self._batch_generate([prompt])
+        results = self._batch_generate([prompt], method_name="generate_comment")
         return results[0] if results else ""
 
     def batch_generate_comments(self, requests: List[dict]) -> List[str]:
@@ -167,7 +208,7 @@ class VLLMService:
             )
             for r in requests
         ]
-        return self._batch_generate(prompts)
+        return self._batch_generate(prompts, method_name="generate_comment")
 
     def decide_follow(self, username: str, bio: str, topics: str,
                       cluster_id: int = 0) -> str:
@@ -176,7 +217,7 @@ class VLLMService:
             f"Bio: {bio}\nRecent topics: {topics}\n"
             f"Reply ONLY with: FOLLOW or SKIP."
         )
-        results = self._batch_generate([prompt])
+        results = self._batch_generate([prompt], method_name="decide_follow")
         result = results[0].upper() if results else "SKIP"
         return "FOLLOW" if "FOLLOW" in result else "SKIP"
 
@@ -186,7 +227,14 @@ class VLLMService:
         outputs = self.llm_v.generate(
             [f"Describe this photo: <img {url}>"], self.sampling_params_v
         )
-        return outputs[0].outputs[0].text.strip() if outputs else ""
+        result = outputs[0].outputs[0].text.strip() if outputs else ""
+        if self.usage_tracker:
+            self.usage_tracker.record_call(
+                "describe_photo",
+                input_tokens=_estimate_tokens_from_text(url),
+                output_tokens=_estimate_tokens_from_text(result),
+            )
+        return result
 
     def get_capabilities(self) -> Dict[str, Any]:
         return {

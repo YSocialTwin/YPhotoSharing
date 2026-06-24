@@ -18,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 
 from YPhotoSharing.common_utils import build_structured_file_logger
+from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,13 @@ def _build_ollama_url(llm_config: dict) -> str:
     if ":" in address:
         return f"http://{address}"
     return f"http://{address}:{port}"
+
+
+def _estimate_tokens_from_text(*parts: Any) -> int:
+    text = " ".join(str(part) for part in parts if part is not None).strip()
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
 
 
 
@@ -61,6 +69,13 @@ class LLMService:
         logging_config = logging_config or {}
         log_dir = Path(logging_config.get("log_dir", "."))
         instance_name = str(logging_config.get("instance_name", "client"))
+        self.usage_tracker = None
+        if logging_config.get("enable_llm_usage_log", True):
+            self.usage_tracker = LLMUsageTracker(
+                logger=logging.getLogger(f"YPhotoSharing.LLMUsage.{instance_name}"),
+                log_file_path=log_dir / f"{instance_name}_llm_usage.log",
+                enable_file_logging=True,
+            )
         self.prompt_logger = None
         if logging_config.get("enable_prompt_log", False):
             self.prompt_logger = build_structured_file_logger(
@@ -132,6 +147,12 @@ class LLMService:
         try:
             response = chain.invoke(kwargs).strip()
             self._log_prompt(template_key, kwargs, response, backend="text")
+            if self.usage_tracker:
+                self.usage_tracker.record_call(
+                    template_key,
+                    input_tokens=_estimate_tokens_from_text(kwargs),
+                    output_tokens=_estimate_tokens_from_text(response),
+                )
             return response
         except Exception as exc:
             logger.warning(f"LLM call failed ({template_key}): {exc}")
@@ -217,6 +238,12 @@ class LLMService:
                     response,
                     backend="vision",
                 )
+                if self.usage_tracker:
+                    self.usage_tracker.record_call(
+                        "generate_comment",
+                        input_tokens=_estimate_tokens_from_text(persona, caption, author, image_url, mention_instruction),
+                        output_tokens=_estimate_tokens_from_text(response),
+                    )
                 return response
             except Exception as exc:
                 logger.warning(f"Vision LLM call failed for comment: {exc}")
@@ -239,6 +266,12 @@ class LLMService:
         try:
             response = chain.invoke({"url": url}).strip()
             self._log_prompt("describe_photo", {"url": url}, response, backend="vision")
+            if self.usage_tracker:
+                self.usage_tracker.record_call(
+                    "describe_photo",
+                    input_tokens=_estimate_tokens_from_text(url),
+                    output_tokens=_estimate_tokens_from_text(response),
+                )
             return response
         except Exception as exc:
             logger.warning(f"Vision LLM call failed: {exc}")

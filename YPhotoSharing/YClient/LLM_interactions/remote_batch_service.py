@@ -7,12 +7,15 @@ Only client-side components may import this module.
 """
 
 import logging
+import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import ray
 import requests
 from langchain_ollama import ChatOllama
+
+from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,13 @@ def _extract_text(response: Any) -> str:
     return str(content).strip()
 
 
+def _estimate_tokens_from_text(*parts: Any) -> int:
+    text = " ".join(str(part) for part in parts if part is not None).strip()
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
 # -------------------------------------------------- Auto-detect ------
 
 def _probe_openai_batch(config: Dict[str, Any]) -> bool:
@@ -218,6 +228,15 @@ class RemoteBatchLLMService:
         self.model_name = llm_config.get("model", "llama3.2")
         self.temperature = llm_config.get("temperature", 0.7)
         self.max_tokens = llm_config.get("max_tokens", 256)
+        log_dir = os.path.expanduser(str((logging_config or {}).get("log_dir", ".")))
+        instance_name = str((logging_config or {}).get("instance_name", "client"))
+        self.usage_tracker = None
+        if (logging_config or {}).get("enable_llm_usage_log", True):
+            self.usage_tracker = LLMUsageTracker(
+                logger=logging.getLogger(f"YPhotoSharing.LLMUsage.{instance_name}"),
+                log_file_path=os.path.join(log_dir, f"{instance_name}_llm_usage.log"),
+                enable_file_logging=True,
+            )
 
         provider = llm_config.get("_resolved_remote_api") or resolve_provider(llm_config)
         if not provider:
@@ -239,12 +258,33 @@ class RemoteBatchLLMService:
             else:
                 self.llm_v = _OllamaAdapter(llm_v_config)
 
+        if self.usage_tracker:
+            gpu_visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+            self.usage_tracker.log_gpu_selection(
+                {
+                    "physical_gpu_id": gpu_visible,
+                    "logical_gpu_id": 0 if gpu_visible else None,
+                    "assignment_method": "remote_batch",
+                    "cuda_visible_devices": gpu_visible,
+                },
+                model_name=self.model_name,
+                backend=f"remote_batch_{self.provider}",
+            )
+
         logger.info(f"RemoteBatchLLMService ready (provider={provider}, model={self.model_name})")
 
     # ------------------------------------------------------------------
 
-    def _gen(self, prompts: List[str]) -> List[str]:
-        return self._adapter.generate(prompts, self.temperature, self.max_tokens)
+    def _gen(self, prompts: List[str], *, method_name: str) -> List[str]:
+        results = self._adapter.generate(prompts, self.temperature, self.max_tokens)
+        if self.usage_tracker:
+            for prompt_text, result_text in zip(prompts, results):
+                self.usage_tracker.record_call(
+                    method_name,
+                    input_tokens=_estimate_tokens_from_text(prompt_text),
+                    output_tokens=_estimate_tokens_from_text(result_text),
+                )
+        return results
 
     def generate_caption(self, topic: str, day: int, slot: int,
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
@@ -252,7 +292,7 @@ class RemoteBatchLLMService:
             f"Write an Instagram caption for a photo about: {topic}. "
             f"Day {day}, slot {slot}. Max 30 words. Add 2-3 hashtags."
         )
-        results = self._gen([prompt])
+        results = self._gen([prompt], method_name="generate_caption")
         return results[0] if results else ""
 
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
@@ -263,14 +303,14 @@ class RemoteBatchLLMService:
             )
             for r in requests
         ]
-        return self._gen(prompts)
+        return self._gen(prompts, method_name="generate_caption")
 
     def decide_reaction(self, caption: str, cluster_id: int = 0) -> str:
         prompt = (
             f"Read this Instagram caption and reply ONLY with one word: "
             f"LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {caption}"
         )
-        results = self._gen([prompt])
+        results = self._gen([prompt], method_name="decide_reaction")
         result = results[0].upper() if results else "LIKE"
         allowed = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
         return result if result in allowed else "LIKE"
@@ -283,7 +323,7 @@ class RemoteBatchLLMService:
             )
             for r in requests
         ]
-        results = self._gen(prompts)
+        results = self._gen(prompts, method_name="decide_reaction")
         allowed = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
         return [r.upper() if r.upper() in allowed else "LIKE" for r in results]
 
@@ -293,7 +333,7 @@ class RemoteBatchLLMService:
             f'{author} posted: "{caption}"\n\n'
             f"Write a brief Instagram comment (under 100 characters)."
         )
-        results = self._gen([prompt])
+        results = self._gen([prompt], method_name="generate_comment")
         return results[0] if results else ""
 
     def batch_generate_comments(self, requests: List[dict]) -> List[str]:
@@ -304,7 +344,7 @@ class RemoteBatchLLMService:
             )
             for r in requests
         ]
-        return self._gen(prompts)
+        return self._gen(prompts, method_name="generate_comment")
 
     def decide_follow(self, username: str, bio: str, topics: str,
                       cluster_id: int = 0) -> str:
@@ -313,7 +353,7 @@ class RemoteBatchLLMService:
             f"Bio: {bio}\nRecent topics: {topics}\n"
             f"Reply ONLY with: FOLLOW or SKIP."
         )
-        results = self._gen([prompt])
+        results = self._gen([prompt], method_name="decide_follow")
         result = results[0].upper() if results else "SKIP"
         return "FOLLOW" if "FOLLOW" in result else "SKIP"
 
@@ -324,7 +364,14 @@ class RemoteBatchLLMService:
             [f"Describe this photo: <img {url}>"],
             self.temperature, self.max_tokens,
         )
-        return results[0] if results else ""
+        result = results[0] if results else ""
+        if self.usage_tracker:
+            self.usage_tracker.record_call(
+                "describe_photo",
+                input_tokens=_estimate_tokens_from_text(url),
+                output_tokens=_estimate_tokens_from_text(result),
+            )
+        return result
 
     def get_capabilities(self) -> Dict[str, Any]:
         return {

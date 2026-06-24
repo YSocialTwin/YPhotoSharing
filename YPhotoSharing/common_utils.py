@@ -132,6 +132,31 @@ def build_structured_file_logger(
     return logger
 
 
+def build_json_line_file_logger(
+    logger_name: str,
+    log_file: Path,
+    *,
+    level: int = logging.INFO,
+    backup_count: int = 5,
+    max_bytes: int = 10 * 1024 * 1024,
+    propagate: bool = False,
+) -> logging.Logger:
+    """Create a rotating file logger that writes one preformatted JSON line per record."""
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(level)
+    logger.propagate = propagate
+    if logger.handlers:
+        logger.handlers.clear()
+
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backup_count)
+    handler.rotator = _compress_rotated_log
+    handler.namer = lambda name: name + ".gz"
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    return logger
+
+
 def setup_logging(
     config_dir: Path,
     component_name: str,
@@ -154,6 +179,7 @@ def setup_logging(
         else:
             enable_execution_log = logging_config.get("enable_execution_log", True)
     else:
+        logging_config = {}
         enable_console_flag = bool(logging_config_or_enable_console)
         enable_execution_log = True
 
@@ -195,6 +221,31 @@ def setup_logging(
                     "component": component_key,
                     "instance_name": resolved_name,
                     "log_file": str(log_file),
+                }
+            },
+        )
+
+    enable_actor_log = logging_config.get("enable_actor_log", True)
+    if enable_actor_log:
+        if component_key == "client":
+            actor_log_file = log_dir / f"{resolved_name}_actor.log"
+        elif component_key == "server":
+            actor_log_file = log_dir / f"{resolved_name}_actor.log"
+        else:
+            actor_log_file = log_dir / f"{resolved_name}_actor.log"
+
+        actor_handler = RotatingFileHandler(actor_log_file, maxBytes=10 * 1024 * 1024, backupCount=5)
+        actor_handler.rotator = _compress_rotated_log
+        actor_handler.namer = lambda name: name + ".gz"
+        actor_handler.setFormatter(_JsonFormatter())
+        root_logger.addHandler(actor_handler)
+        root_logger.info(
+            "Actor logging enabled",
+            extra={
+                "extra_data": {
+                    "component": component_key,
+                    "instance_name": resolved_name,
+                    "log_file": str(actor_log_file),
                 }
             },
         )
