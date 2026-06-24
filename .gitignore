@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Custom
+.idea/
+*.db
+*.temp
+example/media/
+example/exports/
+logs/

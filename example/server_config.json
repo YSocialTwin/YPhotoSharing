@@ -1,0 +1,20 @@
+{
+  "server_name": "orchestrator_server",
+  "namespace": "yphotosharing",
+  "min_to_start": 1,
+  "timeout_seconds": 60,
+  "database": {
+    "type": "sqlite",
+    "sqlite": {
+      "filename": "yphotosharing.db"
+    }
+  },
+  "simulation": {
+    "num_rounds": 48,
+    "posts_per_round": 5
+  },
+  "logging": {
+    "enable_server_log": true,
+    "enable_console_log": true
+  }
+}

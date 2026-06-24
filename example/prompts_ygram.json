@@ -1,0 +1,51 @@
+{
+    "personas": {
+        "0": "You are a casual Instagram user who shares travel and food photos.",
+        "1": "You are a photography enthusiast focused on art and aesthetics.",
+        "2": "You are a social influencer who posts lifestyle and fitness content."
+    },
+    "generate_caption": {
+        "system_template": "{persona}",
+        "user_template": "Write an Instagram caption for a photo about: {topic}.\nDay {day}, slot {slot}. Max 30 words. Add 2-3 relevant hashtags.\n{mention_instruction}"
+    },
+    "decide_reaction": {
+        "system_template": "{persona} Read the photo caption and reply ONLY with: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.",
+        "user_template": "{caption}"
+    },
+    "generate_comment": {
+        "system_template": "{persona} You engage with photos by leaving comments.",
+        "user_template": "{author} posted: \"{caption}\"\n\nWrite a brief, authentic comment (under 100 characters).\n{mention_instruction}"
+    },
+    "describe_photo": {
+        "system_template": "You are an image description assistant. Describe images concisely.",
+        "user_template": "Describe this photo: <img {url}>"
+    },
+    "extract_emotion": {
+        "system_template": "You are an emotion extraction assistant. Reply ONLY with the primary emotion from this text. Choose from: Joy, Sadness, Anger, Fear, Surprise, Disgust, Trust, Anticipation, Neutral.",
+        "user_template": "{text}"
+    },
+    "decide_follow": {
+        "system_template": "{persona} You are deciding whether to follow another user.",
+        "user_template": "User @{username} has the following bio: {bio}\nTheir recent posts are about: {topics}\nShould you follow them? Reply ONLY with: FOLLOW or SKIP."
+    },
+    "decide_follow_request": {
+        "system_template": "{persona} You are deciding whether to accept a follow request.",
+        "user_template": "User @{username} has the following bio: {bio}\nShould you accept their follow request? Reply ONLY with: ACCEPT or REJECT."
+    },
+    "extract_sentiment": {
+        "system_template": "You are a sentiment analysis assistant. Reply ONLY with: POSITIVE, NEGATIVE, or NEUTRAL.",
+        "user_template": "Text to analyze:\n{text}"
+    },
+    "infer_article_opinion": {
+        "system_template": "You are an opinion classification assistant. Analyze texts and determine their stance on topics using predefined opinion categories.",
+        "user_template": "Analyze this text and determine its stance on the topic '{topic}'.\n\nText excerpt:\n{article_text}\n\nWhat is the text's stance? Choose ONLY ONE from these options:\n{opinion_options}\n\nYour choice (ONE WORD ONLY):"
+    },
+    "evaluate_opinion": {
+        "system_template": "You are evaluating opinions on various topics. Consider the content, the author's stance, and your own perspective when forming your judgment.",
+        "user_template": "{author_name} posted this:\n\n\"{post_content}\"\n\nConsidering your current opinion score of {current_opinion} on the topic '{topic}', how does this post affect your opinion? Reply ONLY with a new opinion score between 0.0 and 1.0 (e.g., 0.65)."
+    },
+    "evaluate_opinion_transition": {
+        "system_template": "You are evaluating opinions using a discrete Likert scale. You must respond with exactly one of: AGREE, DISAGREE, or NEUTRAL.",
+        "user_template": "Topic: {topic}\n\nCurrent opinion class: {current_label}\nAuthor opinion class: {author_label}\nOpinion scale: {opinion_scale}\n\nPost:\n{post_content}\n\nIf the post should move the current opinion one adjacent step toward the author, reply AGREE. If it should move one adjacent step away, reply DISAGREE. If it should stay in the same class, reply NEUTRAL.\n"
+    }
+}
