@@ -8,6 +8,16 @@ The LLM generates the comment text; the server persists it.
 import logging
 from typing import Optional
 
+from YPhotoSharing.YClient.actions.dynamics_helpers import (
+    build_memory_context,
+    build_stress_reward_variations,
+    infer_comment_tone,
+    persist_opinion_updates,
+    persist_stress_reward_variations,
+    record_memory_event,
+    resolve_photo_topic_ids,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,15 +73,18 @@ async def post_comment(
     except Exception as e:
         logger.warning(f"Could not fetch following usernames for comment mentions: {e}")
 
-    # YSimulator Stage 4: Retrieve memory context
     photo_author_id = photo.get("user_id")
-    if photo_author_id:
+    if photo_author_id and agent_attrs.get("enable_memory_annotations", True):
         try:
-            memories = await server.get_memory_events.remote(run_id="default", agent_user_id=user_id, limit=50)
-            recipient_mems = [m for m in memories if m.get("other_user_id") == photo_author_id]
-            if recipient_mems:
-                mem_texts = [m.get("event_type", "interaction") for m in recipient_mems[:5]]
-                agent_attrs["memory_context"] = f"Past interactions with photo author: {', '.join(mem_texts)}"
+            memory_context = await build_memory_context(
+                server,
+                run_id="default",
+                agent_user_id=user_id,
+                other_user_id=photo_author_id,
+                label="Past interactions with photo author",
+            )
+            if memory_context:
+                agent_attrs["memory_context"] = memory_context
         except Exception as e:
             logger.warning(f"Could not retrieve memories for comment: {e}")
 
@@ -101,7 +114,7 @@ async def post_comment(
         )
         
         # YSimulator Stage 4: Store post-interaction summary
-        if photo_author_id and photo_author_id != user_id:
+        if photo_author_id and photo_author_id != user_id and agent_attrs.get("enable_memory_annotations", True):
             try:
                 event_data = {
                     "run_id": "default",
@@ -111,7 +124,7 @@ async def post_comment(
                     "description": f"Commented: {body[:50]}...",
                     "round_id": 0 # We don't have day/hour easily here, so 0 is fine
                 }
-                await server.add_memory_event.remote(event_data)
+                await record_memory_event(server, enabled=True, event_data=event_data)
             except Exception as e:
                 logger.warning(f"Could not save memory event for comment: {e}")
 
@@ -125,13 +138,12 @@ async def post_comment(
 
         # Stage 9: Evolve user interests
         try:
-            topic_ids = await server.get_photo_topics.remote(photo_id)
-            if not topic_ids:
-                import re
-                tags = re.findall(r"#(\w+)", caption)
-                topic_name = tags[0] if tags else photo.get("topic", "general")
-                tid = await server.get_or_create_interest.remote(topic_name)
-                topic_ids = [tid]
+            topic_ids = await resolve_photo_topic_ids(
+                server,
+                photo_id,
+                caption=caption,
+                fallback_topic=photo.get("topic", "general"),
+            )
             if topic_ids:
                 await server.set_user_interests.remote(user_id, topic_ids, round_id)
         except Exception as e:
@@ -144,14 +156,7 @@ async def post_comment(
             and photo_author_id != user_id
         ):
             try:
-                tone = "neutral"
-                body_lower = body.strip().lower()
-                if sentiment_score == 1.0:
-                    tone = "positive"
-                elif sentiment_score == -1.0:
-                    tone = "hostile" if any(k in body_lower for k in ("hate", "stupid", "idiot", "trash", "awful")) else "critical"
-                elif any(k in body_lower for k in ("great", "love", "nice", "support", "awesome")):
-                    tone = "supportive"
+                tone = infer_comment_tone(body, sentiment_score)
 
                 target_state = stress_reward_system.compute_current_stress_reward(
                     server=server,
@@ -166,60 +171,27 @@ async def post_comment(
                     directness=1.0,
                     support_strength=1.0 if tone == "supportive" else 0.0,
                 )
-                variations = []
-                if abs(float(deltas.get("delta_stress", 0.0))) > 1e-9:
-                    variations.append({"variable": "stress", "value": float(deltas["delta_stress"])})
-                if abs(float(deltas.get("delta_reward", 0.0))) > 1e-9:
-                    variations.append({"variable": "reward", "value": float(deltas["delta_reward"])})
-                if variations:
-                    await server.set_stress_reward_variations.remote(
-                        str(photo_author_id),
-                        round_id,
-                        variations,
-                        action_name=f"comment:{tone}",
-                    )
+                await persist_stress_reward_variations(
+                    server,
+                    target_user_id=str(photo_author_id),
+                    round_id=round_id,
+                    variations=build_stress_reward_variations(deltas),
+                    action_name=f"comment:{tone}",
+                )
             except Exception as e:
                 logger.warning(f"Failed to persist stress/reward for comment: {e}")
 
         # Stage 6: Opinion Dynamics
         if opinion_manager and opinion_manager.is_enabled():
             try:
-                updates = opinion_manager.calculate_opinion_updates(
-                    agent_id=user_id,
+                await persist_opinion_updates(
+                    opinion_manager=opinion_manager,
+                    server=server,
+                    user_id=user_id,
                     parent_post_id=photo_id,
-                    parent_post_data=photo
+                    parent_post_data=photo,
+                    round_id=round_id,
                 )
-                if updates:
-                    for topic_id, new_val in updates.items():
-                        event = getattr(opinion_manager.calculator, "last_update_events", {}).get(topic_id, {})
-                        topic_name = event.get("topic_name", topic_id)
-                        await server.update_user_opinion.remote(
-                            user_id,
-                            topic_name,
-                            new_val,
-                            round_id,
-                            topic_id=topic_id,
-                            opinion_label=event.get("target_label"),
-                            model_name=event.get("model_name"),
-                        )
-                        if event:
-                            await server.record_opinion_path.remote(
-                                user_id,
-                                topic_name,
-                                round_id,
-                                event.get("model_name", "bounded_confidence"),
-                                event.get("source_score"),
-                                event.get("source_label"),
-                                event.get("target_score", new_val),
-                                event.get("target_label"),
-                                event.get("transition", "neutral"),
-                                direction=event.get("direction"),
-                                evaluation_scope=event.get("evaluation_scope"),
-                                topic_id=topic_id,
-                                parent_post_id=photo_id,
-                                actor_user_id=user_id,
-                                payload_json=None,
-                            )
             except Exception as e:
                 logger.warning(f"Failed to process opinion dynamics in comment: {e}")
 

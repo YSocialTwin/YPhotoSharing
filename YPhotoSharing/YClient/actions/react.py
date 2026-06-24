@@ -8,6 +8,13 @@ The LLM decides the reaction type; the server records it.
 import logging
 from typing import Optional
 
+from YPhotoSharing.YClient.actions.dynamics_helpers import (
+    build_stress_reward_variations,
+    persist_opinion_updates,
+    persist_stress_reward_variations,
+    resolve_photo_topic_ids,
+)
+
 logger = logging.getLogger(__name__)
 
 VALID_REACTIONS = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
@@ -62,13 +69,12 @@ async def react_to_photo(
 
         # Stage 9: Evolve user interests
         try:
-            topic_ids = await server.get_photo_topics.remote(photo_id)
-            if not topic_ids:
-                import re
-                tags = re.findall(r"#(\w+)", caption)
-                topic_name = tags[0] if tags else photo.get("topic", "general")
-                tid = await server.get_or_create_interest.remote(topic_name)
-                topic_ids = [tid]
+            topic_ids = await resolve_photo_topic_ids(
+                server,
+                photo_id,
+                caption=caption,
+                fallback_topic=photo.get("topic", "general"),
+            )
             if topic_ids:
                 await server.set_user_interests.remote(user_id, topic_ids, round_id)
         except Exception as e:
@@ -93,60 +99,27 @@ async def react_to_photo(
                     current_stress=target_state["stress"],
                     current_reward=target_state["reward"],
                 )
-                variations = []
-                if abs(float(deltas.get("delta_stress", 0.0))) > 1e-9:
-                    variations.append({"variable": "stress", "value": float(deltas["delta_stress"])})
-                if abs(float(deltas.get("delta_reward", 0.0))) > 1e-9:
-                    variations.append({"variable": "reward", "value": float(deltas["delta_reward"])})
-                if variations:
-                    await server.set_stress_reward_variations.remote(
-                        str(photo.get("user_id")),
-                        round_id,
-                        variations,
-                        action_name=f"reaction:{reaction.lower()}",
-                    )
+                await persist_stress_reward_variations(
+                    server,
+                    target_user_id=str(photo.get("user_id")),
+                    round_id=round_id,
+                    variations=build_stress_reward_variations(deltas),
+                    action_name=f"reaction:{reaction.lower()}",
+                )
             except Exception as e:
                 logger.warning(f"Failed to persist stress/reward for reaction: {e}")
             
         # Stage 6: Opinion Dynamics
         if opinion_manager and opinion_manager.is_enabled():
             try:
-                updates = opinion_manager.calculate_opinion_updates(
-                    agent_id=user_id,
+                await persist_opinion_updates(
+                    opinion_manager=opinion_manager,
+                    server=server,
+                    user_id=user_id,
                     parent_post_id=photo_id,
-                    parent_post_data=photo
+                    parent_post_data=photo,
+                    round_id=round_id,
                 )
-                if updates:
-                    for topic_id, new_val in updates.items():
-                        event = getattr(opinion_manager.calculator, "last_update_events", {}).get(topic_id, {})
-                        topic_name = event.get("topic_name", topic_id)
-                        await server.update_user_opinion.remote(
-                            user_id,
-                            topic_name,
-                            new_val,
-                            round_id,
-                            topic_id=topic_id,
-                            opinion_label=event.get("target_label"),
-                            model_name=event.get("model_name"),
-                        )
-                        if event:
-                            await server.record_opinion_path.remote(
-                                user_id,
-                                topic_name,
-                                round_id,
-                                event.get("model_name", "bounded_confidence"),
-                                event.get("source_score"),
-                                event.get("source_label"),
-                                event.get("target_score", new_val),
-                                event.get("target_label"),
-                                event.get("transition", "neutral"),
-                                direction=event.get("direction"),
-                                evaluation_scope=event.get("evaluation_scope"),
-                                topic_id=topic_id,
-                                parent_post_id=photo_id,
-                                actor_user_id=user_id,
-                                payload_json=None,
-                            )
             except Exception as e:
                 logger.warning(f"Failed to process opinion dynamics in react: {e}")
 

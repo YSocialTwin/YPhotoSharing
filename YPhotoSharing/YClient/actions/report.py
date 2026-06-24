@@ -7,6 +7,11 @@ import logging
 import random
 from typing import Optional
 
+from YPhotoSharing.YClient.actions.dynamics_helpers import (
+    build_stress_reward_variations,
+    persist_stress_reward_variations,
+)
+
 logger = logging.getLogger(__name__)
 
 async def report_content(
@@ -72,18 +77,13 @@ async def report_content(
                         current_reward=target_state["reward"],
                         public_exposure=1.0,
                     )
-                    variations = []
-                    if abs(float(deltas.get("delta_stress", 0.0))) > 1e-9:
-                        variations.append({"variable": "stress", "value": float(deltas["delta_stress"])})
-                    if abs(float(deltas.get("delta_reward", 0.0))) > 1e-9:
-                        variations.append({"variable": "reward", "value": float(deltas["delta_reward"])})
-                    if variations:
-                        await server.set_stress_reward_variations.remote(
-                            str(photo.get("user_id")),
-                            round_id,
-                            variations,
-                            action_name="report:mass_report",
-                        )
+                    await persist_stress_reward_variations(
+                        server,
+                        target_user_id=str(photo.get("user_id")),
+                        round_id=round_id,
+                        variations=build_stress_reward_variations(deltas),
+                        action_name="report:mass_report",
+                    )
                 except Exception as e:
                     logger.warning(f"Failed to persist stress/reward for report: {e}")
             return {"reported_photo_id": photo.get("id"), "reason": reason}
