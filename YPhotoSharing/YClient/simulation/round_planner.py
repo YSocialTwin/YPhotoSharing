@@ -54,6 +54,8 @@ class SimulationRoundPlanner:
         active_agents = []
         for agent in agents:
             user_data = getattr(agent, "user_data", {}) or {}
+            if user_data.get("is_churned") or user_data.get("left_on") is not None:
+                continue
             u_profile = user_data.get("activity_profile")
 
             if u_profile and u_profile in profiles:

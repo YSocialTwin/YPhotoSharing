@@ -8,6 +8,7 @@ through the server's remote API.
 
 import asyncio
 import logging
+import random
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +23,7 @@ from YPhotoSharing.YClient.simulation.bootstrap import (
     normalize_agent_population_document,
     normalize_agent_config,
 )
+from YPhotoSharing.YClient.simulation.lifecycle_manager import LifecycleManager
 from YPhotoSharing.YClient.simulation.round_planner import SimulationRoundPlanner
 
 logger = logging.getLogger(__name__)
@@ -91,6 +93,7 @@ class SimulationClient:
         self._round_count = 0
         self._start_time = time.time()
         self.round_planner = SimulationRoundPlanner(self.simulation_config)
+        self.lifecycle_manager = None
 
         global logger
         logger = setup_logging(
@@ -149,6 +152,16 @@ class SimulationClient:
             logger=logger,
         )
 
+        self.lifecycle_manager = LifecycleManager(
+            server=self.server,
+            client_id=self.client_id,
+            config_path=self.config_path,
+            simulation_config=self.simulation_config,
+            logger=logger,
+            add_agent_from_record_func=self._register_agent_from_record,
+            existing_usernames_func=lambda: [agent.username for agent in self._agents],
+        )
+
         # Register with server
         # Do NOT call ray.get here. It will block the async actor loop.
         pass
@@ -175,61 +188,27 @@ class SimulationClient:
         """Register agents from a YSimulator-style population document."""
         population = normalize_agent_population_document(user_configs)
         user_records = list(population.get("agents", []))
-        self._agents = []
+        self._agents.clear()
         import random
 
         # Stage 6: Initialize Opinions (create a baseline round once)
         init_round_id = await self.server.get_or_create_round.remote(-1, -1)
-        op_dyn = self.simulation_config.get("opinion_dynamics", {})
         for u in user_records:
-            u = normalize_agent_config(u, self.simulation_config)
-            # Register user in the database
             try:
-                u["id"] = await self.server.create_user.remote(u)
-
-                if op_dyn.get("enabled", False):
-                    topics = self.simulation_config.get("discussion_topics", ["general"])
-                    groups = op_dyn.get("opinion_groups", {"Neutral": [0.4, 0.6]})
-                    for topic in topics:
-                        group = random.choice(list(groups.values()))
-                        val = random.uniform(group[0], group[1])
-                        await self.server.update_user_opinion.remote(u["id"], topic, val, init_round_id)
-
-                topics = self.simulation_config.get("discussion_topics", ["general"])
-                topic_ids = []
-                topic_lookup = {}
-                for topic in topics:
-                    tid = await self.server.get_or_create_interest.remote(topic)
-                    topic_ids.append(tid)
-                    topic_lookup[topic] = tid
-
-                if u.get("interests"):
-                    user_interest_ids = []
-                    for topic_name in u["interests"]:
-                        if topic_name in topic_lookup:
-                            user_interest_ids.append(topic_lookup[topic_name])
-                        else:
-                            user_interest_ids.append(
-                                await self.server.get_or_create_interest.remote(topic_name)
-                            )
-                else:
-                    user_interest_ids = build_initial_interest_ids(
-                        user_config=u,
-                        simulation_config=self.simulation_config,
-                        topic_ids=topic_ids,
-                        topic_lookup=topic_lookup,
-                    )
-
-                # Use the valid init_round_id for initial interests
-                await self.server.set_user_interests.remote(u["id"], user_interest_ids, init_round_id)
-
+                registered_user = await self._register_agent_record(
+                    normalize_agent_config(u, self.simulation_config),
+                    round_id=init_round_id,
+                    day=self.simulation_config.get("start_day", 0),
+                    initialize_opinions=True,
+                )
             except Exception as e:
                 logger.warning(f"Could not register user {u.get('id')} or opinions: {e}")
-            weights = self.round_planner.build_action_weights(u)
+                registered_user = normalize_agent_config(u, self.simulation_config)
+            weights = self.round_planner.build_action_weights(registered_user)
 
             self._agents.append(
                 Agent(
-                    user_data=u,
+                    user_data=registered_user,
                     server=self.server,
                     llm_service=self.llm_service,
                     action_logger=self.action_logger,
@@ -243,6 +222,93 @@ class SimulationClient:
             )
         logger.info(f"Client {self.client_id}: loaded {len(self._agents)} agents")
         return len(self._agents)
+
+    async def _register_agent_record(
+        self,
+        user_record: Dict[str, Any],
+        *,
+        round_id: str,
+        day: int,
+        initialize_opinions: bool = False,
+    ) -> Dict[str, Any]:
+        record = dict(user_record)
+        record.setdefault("is_churned", False)
+        record.setdefault("left_on", None)
+        record.setdefault("last_active_day", None)
+        record.setdefault("satisfaction_score", 100.0)
+        if "id" not in record or not record["id"]:
+            record["id"] = str(uuid.uuid4())
+        record["id"] = await self.server.create_user.remote(record)
+
+        if initialize_opinions:
+            op_dyn = self.simulation_config.get("opinion_dynamics", {})
+            if op_dyn.get("enabled", False):
+                topics = self.simulation_config.get("discussion_topics", ["general"])
+                groups = op_dyn.get("opinion_groups", {"Neutral": [0.4, 0.6]})
+                for topic in topics:
+                    group = random.choice(list(groups.values()))
+                    val = random.uniform(group[0], group[1])
+                    await self.server.update_user_opinion.remote(record["id"], topic, val, round_id)
+
+            topics = self.simulation_config.get("discussion_topics", ["general"])
+            topic_ids = []
+            topic_lookup = {}
+            for topic in topics:
+                tid = await self.server.get_or_create_interest.remote(topic)
+                topic_ids.append(tid)
+                topic_lookup[topic] = tid
+
+            if record.get("interests"):
+                user_interest_ids = []
+                for topic_name in record["interests"]:
+                    if topic_name in topic_lookup:
+                        user_interest_ids.append(topic_lookup[topic_name])
+                    else:
+                        user_interest_ids.append(
+                            await self.server.get_or_create_interest.remote(topic_name)
+                        )
+            else:
+                user_interest_ids = build_initial_interest_ids(
+                    user_config=record,
+                    simulation_config=self.simulation_config,
+                    topic_ids=topic_ids,
+                    topic_lookup=topic_lookup,
+                )
+
+            await self.server.set_user_interests.remote(record["id"], user_interest_ids, round_id)
+            await self.server.update_last_active_day.remote(record["id"], day)
+
+        return record
+
+    async def _register_agent_from_record(
+        self,
+        user_record: Dict[str, Any],
+        *,
+        round_id: str,
+        day: int,
+    ) -> Dict[str, Any]:
+        registered_user = await self._register_agent_record(
+            user_record,
+            round_id=round_id,
+            day=day,
+            initialize_opinions=True,
+        )
+        weights = self.round_planner.build_action_weights(registered_user)
+        self._agents.append(
+            Agent(
+                user_data=registered_user,
+                server=self.server,
+                llm_service=self.llm_service,
+                action_logger=self.action_logger,
+                image_gen_service=self.image_gen_service,
+                action_weights=weights,
+                opinion_manager=self.opinion_manager,
+                stress_reward_system=self.stress_reward_system,
+                stress_reward_enabled=self.stress_reward_enabled,
+                stress_reward_backward_rounds=self.stress_reward_backward_rounds,
+            )
+        )
+        return registered_user
 
     def _is_llm_agent(self, user_data: dict) -> bool:
         return bool(user_data.get("llm", True))
@@ -260,6 +326,28 @@ class SimulationClient:
         self._round_count += 1
 
         all_results = await self._run_agents_async(day, hour, round_id)
+
+        if hour == 23 and self.lifecycle_manager is not None:
+            try:
+                lifecycle_stats = await self.lifecycle_manager.evaluate_end_of_day(
+                    day=day,
+                    round_id=round_id,
+                    agents=self._agents,
+                )
+                if self.action_logger:
+                    self.action_logger.info(
+                        "Client lifecycle completed",
+                        extra={
+                            "extra_data": {
+                                "client_id": self.client_id,
+                                "day": day,
+                                "round_id": round_id,
+                                **lifecycle_stats,
+                            }
+                        },
+                    )
+            except Exception as exc:
+                logger.warning(f"Lifecycle evaluation failed for day {day}: {exc}")
 
         summary = {
             "client_id": self.client_id,

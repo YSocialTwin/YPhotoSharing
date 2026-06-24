@@ -185,6 +185,14 @@ class DatabaseMiddleware:
             user.is_churned = is_churned
             return True
 
+    def update_last_active_day(self, user_id: str, day: int) -> bool:
+        with self.session_scope() as s:
+            user = s.query(User_mgmt).filter_by(id=user_id).first()
+            if not user:
+                return False
+            user.last_active_day = int(day)
+            return True
+
     # ------------------------------------------------------------------
     # Follow helpers
     # ------------------------------------------------------------------

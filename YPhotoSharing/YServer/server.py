@@ -239,6 +239,9 @@ class OrchestratorServer:
     def set_churn_state(self, user_id: str, is_churned: bool) -> bool:
         return self._db.set_churn_state(user_id, is_churned)
 
+    def update_last_active_day(self, user_id: str, day: int) -> bool:
+        return self._db.update_last_active_day(user_id, day)
+
     def get_user(self, user_id: str) -> Optional[dict]:
         return self._db.get_user(user_id)
 

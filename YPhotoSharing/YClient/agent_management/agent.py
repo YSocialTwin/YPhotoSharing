@@ -113,6 +113,11 @@ class Agent:
         if self.user_data.get("is_churned"):
             return [{"action": "churned", "status": "inactive"}]
 
+        try:
+            await self.server.update_last_active_day.remote(self.user_id, day)
+        except Exception as exc:
+            logger.warning(f"Could not update last_active_day for {self.user_id}: {exc}")
+
         # Phase 10: Evaluate Satisfaction
         await self._update_satisfaction()
 

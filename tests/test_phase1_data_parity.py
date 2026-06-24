@@ -5,6 +5,7 @@ from YPhotoSharing.YClient.simulation.bootstrap import (
     normalize_agent_config,
     normalize_agent_population_document,
 )
+from YPhotoSharing.YClient.simulation.lifecycle_manager import LifecycleManager
 from YPhotoSharing.YClient.LLM_interactions.llm_service import _format_persona_context
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 
@@ -121,3 +122,62 @@ def test_persona_context_uses_profile_and_photo_sharing_details():
     assert "Interests: travel, food." in persona
     assert "favorite filters: warm, vintage" in persona
     assert "Additional personal details: aesthetic: warm travel diary; tone: curious and friendly." in persona
+
+
+def test_lifecycle_manager_defaults_are_disabled_and_zero():
+    manager = LifecycleManager(
+        server=None,
+        client_id="client_1",
+        config_path=".",
+        simulation_config={"agents": {}},
+        logger=None,
+        add_agent_from_record_func=lambda *args, **kwargs: None,
+        existing_usernames_func=lambda: [],
+    )
+
+    assert manager.churn_enabled is False
+    assert manager.churn_probability == 0.0
+    assert manager.churn_percentage == 0.0
+    assert manager.new_agents_enabled is False
+    assert manager.probability_new_agents == 0.0
+    assert manager.percentage_new_agents == 0.0
+
+
+def test_lifecycle_manager_builds_new_agent_from_template():
+    manager = LifecycleManager(
+        server=None,
+        client_id="client_1",
+        config_path=".",
+        simulation_config={
+            "agents": {
+                "new_agents": {
+                    "enabled": True,
+                    "probability_new_agents": 1.0,
+                    "percentage_new_agents": 1.0,
+                }
+            }
+        },
+        logger=None,
+        add_agent_from_record_func=lambda *args, **kwargs: None,
+        existing_usernames_func=lambda: ["template_user"],
+    )
+
+    record = manager._make_new_agent_user_data(
+        {
+            "id": "template-id",
+            "username": "template_user",
+            "user_type": "llm",
+            "photo_sharing": {"creator_tier": "pro"},
+            "is_private": False,
+            "is_verified": True,
+            "attention_budget": 100,
+        },
+        day=4,
+        round_id="round-4",
+    )
+
+    assert record["username"] != "template_user"
+    assert record["left_on"] is None
+    assert record["is_churned"] is False
+    assert record["last_active_day"] == 4
+    assert record["photo_sharing"]["creator_tier"] == "pro"
