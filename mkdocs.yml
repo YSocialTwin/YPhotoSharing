@@ -17,6 +17,10 @@ nav:
   - Architecture: architecture.md
   - Configuration: configuration.md
   - Annotations: annotations.md
+  - Recommendations: recommendations.md
+  - Service Description: Service_description.md
+  - Platform Requirements: platform_requirements.md
+  - Remaining Gaps: remaining_gaps.md
   - Experiments & Presets: experiments.md
   - YSimulator Alignment: ysimulator_alignment.md
 

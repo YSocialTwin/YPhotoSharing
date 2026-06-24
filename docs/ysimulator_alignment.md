@@ -546,4 +546,4 @@ That gives you a platform that is both semantically correct for photos and
 maintainable at YSimulator-like quality.
 
 For the concrete implementation backlog, see
-[docs/remaining_gaps.md](/Users/rossetti/PycharmProjects/YPhotoSharing/docs/remaining_gaps.md).
+[docs/remaining_gaps.md](remaining_gaps.md).

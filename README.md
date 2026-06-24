@@ -144,3 +144,4 @@ Then navigate to `http://127.0.0.1:8000` in your browser.
 
 For the alignment analysis and the phased implementation plan, see [`docs/ysimulator_alignment.md`](docs/ysimulator_alignment.md).
 For annotation configuration details, see [`docs/annotations.md`](docs/annotations.md).
+For recommendation behavior and ranking signals, see [`docs/recommendations.md`](docs/recommendations.md).

@@ -113,7 +113,7 @@ Validation:
 
 ## Priority 4: Platform-Specific Depth
 
-Status: still open.
+Status: partially implemented.
 
 Why it matters:
 - This is not parity work in the narrow sense, but it is the place where
@@ -121,13 +121,13 @@ Why it matters:
 
 What is missing:
 - Richer story behavior.
-- Better media-centric discovery and ranking signals.
 - Stronger creator-centric retention signals.
 
 Next implementation steps:
 1. Improve the features that are unique to a photo-sharing platform.
-2. Prefer changes that affect generated media, stories, or visual discovery.
-3. Keep microblogging-specific abstractions out of the core path.
+2. Deepen story and ephemeral-media behavior.
+3. Extend creator-retention dynamics if future experiments need it.
+4. Keep microblogging-specific abstractions out of the core path.
 
 Validation:
 - The simulation should feel more like Instagram, not like a renamed microblog.
@@ -146,6 +146,7 @@ regression appears:
 - photo-topic persistence
 - phase-level regression tests
 - annotation toggles for emotion, sentiment, and memory
+- recommendation signals for home/explore/feed ranking
 
 ## Working Order
 
