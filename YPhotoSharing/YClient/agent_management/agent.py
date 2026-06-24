@@ -26,21 +26,14 @@ from YPhotoSharing.YClient.actions.send_dm import send_dm
 from YPhotoSharing.YClient.actions.request_follow import request_follow
 from YPhotoSharing.YClient.actions.review_follow_requests import review_follow_requests
 
+# Story actions
+from YPhotoSharing.YClient.actions.post_story import post_story
+from YPhotoSharing.YClient.actions.watch_story import watch_story
+
 logger = logging.getLogger(__name__)
 
-# Probability weights for action selection (normalised internally)
-DEFAULT_ACTION_WEIGHTS = {
-    "post_photo": 0.15,
-    "react": 0.20,
-    "comment": 0.15,
-    "follow": 0.10,
-    "share": 0.05,
-    "report": 0.05,
-    "save": 0.10,
-    "reply_comment": 0.10,
-    "unfollow": 0.05,
-    "send_dm": 0.05
-}
+# Probability weights for action selection (dynamic from config)
+# DEFAULT_ACTION_WEIGHTS removed in favor of YSimulator config
 
 
 class Agent:
@@ -70,7 +63,7 @@ class Agent:
         self.server = server
         self.llm_service = llm_service
         self.image_gen_service = image_gen_service
-        self.action_weights = action_weights or DEFAULT_ACTION_WEIGHTS
+        self.action_weights = action_weights or {}
         self._round_actions = user_data.get("round_actions", 3)
 
     # ------------------------------------------------------------------
@@ -115,6 +108,7 @@ class Agent:
         # Phase 10: Attention Budget
         # Replace fixed number of actions with an attention budget
         attention_budget = self.user_data.get("attention_budget", 100)
+        self.interacted_users = set()
         
         # Action Costs
         costs = {
@@ -145,6 +139,19 @@ class Agent:
                     results.append({"action": action, **result})
             except Exception as exc:
                 logger.warning(f"Agent {self.user_id} action '{action}' failed: {exc}")
+
+        # Stage 7: Secondary Follows
+        prob_sec = self.user_data.get("probability_of_secondary_follow", 0.0)
+        if prob_sec > 0:
+            for target_id in self.interacted_users:
+                if target_id and target_id != self.user_id and random.random() < prob_sec:
+                    from YPhotoSharing.YClient.actions.request_follow import request_follow
+                    try:
+                        decision = await request_follow(self.server, self.user_id, target_id, round_id)
+                        if decision == "FOLLOW":
+                            results.append({"action": "secondary_follow", "target_user_id": target_id})
+                    except Exception as e:
+                        logger.warning(f"Secondary follow failed for {self.user_id}: {e}")
 
         return results
 
@@ -202,6 +209,10 @@ class Agent:
             return await self._action_unfollow(round_id)
         elif action == "send_dm":
             return await self._action_send_dm(day, hour, round_id)
+        elif action == "post_story":
+            return await self._action_post_story(day, hour, round_id)
+        elif action == "watch_story":
+            return await self._action_watch_story(round_id)
         return None
 
     # ------------------------------------------------------------------
@@ -209,8 +220,12 @@ class Agent:
     # ------------------------------------------------------------------
 
     async def _action_post_photo(self, day: int, hour: int, round_id: str) -> Optional[dict]:
-        topics = ["travel", "food", "fitness", "art", "nature", "fashion", "technology"]
-        topic = random.choice(topics)
+        user_interests = await self.server.get_user_interests.remote(self.user_id)
+        if user_interests:
+            topic = random.choice(user_interests)
+        else:
+            topics = ["travel", "food", "fitness", "art", "nature", "fashion", "technology"]
+            topic = random.choice(topics)
         photo_id = await post_photo(
             server=self.server,
             llm_service=self.llm_service,
@@ -240,8 +255,11 @@ class Agent:
             user_id=self.user_id,
             photo=photo,
             round_id=round_id,
+            agent_attrs=self.user_data,
         )
         if reaction:
+            if hasattr(self, "interacted_users") and "user_id" in photo:
+                self.interacted_users.add(photo["user_id"])
             return {"reaction": reaction, "photo_id": photo.get("id")}
         return None
 
@@ -262,6 +280,8 @@ class Agent:
             agent_attrs=self.user_data,
         )
         if comment_id:
+            if hasattr(self, "interacted_users") and "user_id" in photo:
+                self.interacted_users.add(photo["user_id"])
             return {"comment_id": comment_id, "photo_id": photo.get("id")}
         return None
 
@@ -339,22 +359,20 @@ class Agent:
         return None
 
     async def _action_unfollow(self, round_id: str) -> Optional[dict]:
-        import ray
-        user = ray.get(self.server.get_user.remote(self.user_id))
-        if not user or not user.get("following_ids"):
+        following = await self.server.get_following.remote(self.user_id)
+        if not following:
             return None
-        target = random.choice(user["following_ids"])
+        target = random.choice(following)
         success = await unfollow_user(self.server, self.user_id, target, round_id)
         if success:
             return {"target_user_id": target}
         return None
 
     async def _action_send_dm(self, day: int, hour: int, round_id: str) -> Optional[dict]:
-        import ray
-        user = ray.get(self.server.get_user.remote(self.user_id))
-        if not user or not user.get("following_ids"):
+        following = await self.server.get_following.remote(self.user_id)
+        if not following:
             return None
-        target = random.choice(user["following_ids"])
+        target = random.choice(following)
         
         feed = await self.server.get_home_feed.remote(self.user_id, limit=5)
         photo_id = random.choice(feed)["id"] if feed else None
@@ -372,3 +390,29 @@ class Agent:
         if success:
             return {"target_user_id": target, "photo_id": photo_id}
         return None
+
+    async def _action_post_story(self, day: int, hour: int, round_id: str) -> Optional[dict]:
+        topic = getattr(self, "_current_topic", "general")
+        agent_attrs = self.user_data.copy()
+        
+        story_id = await post_story(
+            server=self.server,
+            llm_service=self.llm_service,
+            user_id=self.user_id,
+            cluster_id=self.cluster_id,
+            round_id=round_id,
+            day=day,
+            slot=hour,
+            topic=topic,
+            agent_attrs=agent_attrs,
+        )
+        if story_id:
+            return {"story_id": story_id}
+        return None
+
+    async def _action_watch_story(self, round_id: str) -> Optional[dict]:
+        return await watch_story(
+            server=self.server,
+            user_id=self.user_id,
+            round_id=round_id,
+        )

@@ -41,6 +41,7 @@ from YPhotoSharing.YServer.classes.models import (
     TrendingHashtag,
     User_mgmt,
     UserInterest,
+    UserOpinion,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,6 +213,7 @@ class DatabaseMiddleware:
     # ------------------------------------------------------------------
 
     def create_photo(self, photo_data: dict) -> str:
+        import re
         with self.session_scope() as s:
             pid = photo_data.get("id") or str(uuid.uuid4())
             s.add(Photo(id=pid, **{k: v for k, v in photo_data.items() if k != "id"}))
@@ -223,7 +225,26 @@ class DatabaseMiddleware:
                 if parent:
                     parent.num_shares += 1
                     
+            # Extract hashtags
+            caption = photo_data.get("caption", "")
+            tags = set(re.findall(r"#(\w+)", caption))
+            for tag in tags:
+                tag = tag.lower()
+                hid = f"hash_{tag}"
+                row = s.query(Hashtag).filter_by(hashtag=tag).first()
+                if not row:
+                    s.add(Hashtag(id=hid, hashtag=tag))
+                
+                # Tag photo
+                s.add(PhotoHashtag(id=str(uuid.uuid4()), photo_id=pid, hashtag_id=hid))
+                    
             return pid
+
+    def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
+        with self.session_scope() as s:
+            eid = str(uuid.uuid4())
+            s.add(PhotoEmotion(id=eid, photo_id=photo_id, emotion=emotion))
+            return True
 
     def get_photo(self, photo_id: str) -> Optional[dict]:
         with self.session_scope() as s:
@@ -326,10 +347,28 @@ class DatabaseMiddleware:
             if existing:
                 return False
             s.add(StoryView(id=str(uuid.uuid4()), story_id=story_id, viewer_id=viewer_id))
-            story = s.query(Story).filter_by(story_id=story_id).first()
+            story = s.query(Story).filter_by(id=story_id).first()
             if story:
                 story.view_count = (story.view_count or 0) + 1
             return True
+
+    def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
+        from datetime import datetime, timedelta
+        with self.session_scope() as s:
+            following = s.query(Follow.user_id).filter_by(follower_id=user_id).all()
+            following_ids = [f[0] for f in following]
+            if not following_ids:
+                return []
+            
+            # Simple heuristic: last 50 stories from followed users
+            rows = (
+                s.query(Story)
+                .filter(Story.user_id.in_(following_ids))
+                .order_by(Story.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows]
 
     # ------------------------------------------------------------------
     # Recommendation helpers
@@ -473,6 +512,12 @@ class DatabaseMiddleware:
                 if not existing:
                     s.add(UserInterest(id=str(uuid.uuid4()), user_id=user_id,
                                        interest_id=iid, round_id=round_id))
+                                       
+    def get_user_interests(self, user_id: str) -> List[str]:
+        """Returns the names of all active interests for a user."""
+        with self.session_scope() as s:
+            rows = s.query(Interest.interest).join(UserInterest).filter(UserInterest.user_id == user_id).all()
+            return [r[0] for r in rows]
 
     # ------------------------------------------------------------------
     # Phase 8 Helpers
@@ -566,3 +611,37 @@ class DatabaseMiddleware:
             # Simple LIKE query for simulation
             rows = s.query(Photo).filter(Photo.caption.like(f"%#{hashtag}%"), Photo.is_removed == 0).order_by(Photo.created_at.desc()).limit(limit).all()
             return [{"id": p.id, "user_id": p.user_id, "caption": p.caption} for p in rows]
+
+    # ------------------------------------------------------------------
+    # Stage 5 & 6 handlers (Sentiment and Opinion)
+    # ------------------------------------------------------------------
+    
+    def update_photo_sentiment(self, photo_id: str, sentiment_score: float) -> bool:
+        with self.session_scope() as s:
+            photo = s.query(Photo).filter_by(id=photo_id).first()
+            if photo:
+                photo.sentiment_score = sentiment_score
+                return True
+            return False
+
+    def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
+        with self.session_scope() as s:
+            comment = s.query(Comment).filter_by(id=comment_id).first()
+            if comment:
+                comment.sentiment_score = sentiment_score
+                return True
+            return False
+
+    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float) -> bool:
+        with self.session_scope() as s:
+            op = s.query(UserOpinion).filter_by(user_id=user_id, topic=topic).first()
+            if op:
+                op.opinion_score = opinion_score
+            else:
+                s.add(UserOpinion(id=str(uuid.uuid4()), user_id=user_id, topic=topic, opinion_score=opinion_score))
+            return True
+
+    def get_user_opinions(self, user_id: str) -> dict:
+        with self.session_scope() as s:
+            ops = s.query(UserOpinion).filter_by(user_id=user_id).all()
+            return {op.topic: op.opinion_score for op in ops}

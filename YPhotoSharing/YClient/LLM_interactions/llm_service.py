@@ -29,44 +29,7 @@ def _build_ollama_url(llm_config: dict) -> str:
     return f"http://{address}:{port}"
 
 
-DEFAULT_PROMPTS = {
-    "personas": {
-        "0": "You are a casual Instagram user who shares travel and food photos.",
-        "1": "You are a photography enthusiast focused on art and aesthetics.",
-        "2": "You are a social influencer who posts lifestyle and fitness content.",
-    },
-    "generate_caption": {
-        "system_template": "{persona}",
-        "user_template": (
-            "Write an Instagram caption for a photo about: {topic}.\n"
-            "Day {day}, slot {slot}. Max 30 words. Add 2-3 relevant hashtags."
-        ),
-    },
-    "decide_reaction": {
-        "system_template": "You are an Instagram user. Read the photo caption and reply ONLY with: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.",
-        "user_template": "{caption}",
-    },
-    "generate_comment": {
-        "system_template": "{persona} You engage with photos by leaving comments.",
-        "user_template": (
-            '{author} posted: "{caption}"\n\n'
-            "Write a brief, authentic comment (under 100 characters). "
-            "You may @mention the author."
-        ),
-    },
-    "describe_photo": {
-        "system_template": "You are an image description assistant. Describe images concisely.",
-        "user_template": "Describe this photo: <img {url}>",
-    },
-    "decide_follow": {
-        "system_template": "{persona} You are deciding whether to follow another user.",
-        "user_template": (
-            "User @{username} has the following bio: {bio}\n"
-            "Their recent posts are about: {topics}\n"
-            "Should you follow them? Reply ONLY with: FOLLOW or SKIP."
-        ),
-    },
-}
+
 
 
 @ray.remote
@@ -91,7 +54,7 @@ class LLMService:
             "model": "llama3.2",
             "temperature": 0.7,
         }
-        self.prompts_config = prompts_config or DEFAULT_PROMPTS
+        self.prompts_config = prompts_config or {}
         base_url = _build_ollama_url(llm_config)
         self.llm = ChatOllama(
             model=llm_config.get("model", "llama3.2"),
@@ -128,7 +91,7 @@ class LLMService:
             return ""
 
     def _get_persona(self, cluster_id: int) -> str:
-        personas = self.prompts_config.get("personas", DEFAULT_PROMPTS["personas"])
+        personas = self.prompts_config.get("personas", {})
         return personas.get(str(cluster_id), personas.get("0", "You are an Instagram user."))
 
     # ------------------------------------------------------------------
@@ -139,8 +102,13 @@ class LLMService:
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Generate an Instagram caption for a photo."""
         persona = self._get_persona(cluster_id)
+        mention_instruction = ""
+        if agent_attrs and "following_usernames" in agent_attrs and agent_attrs["following_usernames"]:
+            users = ", ".join([f"@{u}" for u in agent_attrs["following_usernames"]])
+            mention_instruction = f"You may optionally mention these users: {users}"
+            
         return self._render("generate_caption", persona=persona, topic=topic,
-                            day=day, slot=slot)
+                            day=day, slot=slot, mention_instruction=mention_instruction)
 
     def decide_reaction(self, caption: str, cluster_id: int = 0) -> str:
         """Decide how to react to a photo (LIKE / LOVE / LAUGH / WOW / SAD / ANGRY / IGNORE)."""
@@ -155,13 +123,26 @@ class LLMService:
         """Generate a comment on a photo."""
         persona = self._get_persona(cluster_id)
         
+        mention_instruction = f"You may @mention the author (@{author}). "
+        memory_context = ""
+        if agent_attrs:
+            if agent_attrs.get("following_usernames"):
+                users = ", ".join([f"@{u}" for u in agent_attrs["following_usernames"]])
+                mention_instruction += f"You may also optionally mention these users: {users}"
+            if agent_attrs.get("memory_context"):
+                memory_context = agent_attrs["memory_context"]
+                
+        # Inject memory context into caption for standard prompt (lazy way since we can't easily alter all prompts_config structures safely without a larger refactor)
+        if memory_context:
+            caption = f"{caption}\n\n[System note: {memory_context}]"
+            
         # If we have an image and a vision model, route to vision
         if image_url and self.llm_v:
-            cfg = self.prompts_config.get("generate_comment", DEFAULT_PROMPTS["generate_comment"])
+            cfg = self.prompts_config.get("generate_comment", {})
             system_tpl = cfg.get("system_template", "{persona}")
             user_tpl = cfg.get("user_template", "{content}")
             
-            # Append the image tag so the vision model parses it (following describe_photo convention)
+            # Append the image tag so the vision model parses it
             user_tpl += "\n<img {image_url}>"
             
             prompt = ChatPromptTemplate.from_messages([
@@ -170,19 +151,26 @@ class LLMService:
             ])
             chain = prompt | self.llm_v | self._parser
             try:
-                return chain.invoke({"persona": persona, "caption": caption, "author": author, "image_url": image_url}).strip()
+                return chain.invoke({
+                    "persona": persona, 
+                    "caption": caption, 
+                    "author": author, 
+                    "image_url": image_url,
+                    "mention_instruction": mention_instruction
+                }).strip()
             except Exception as exc:
                 logger.warning(f"Vision LLM call failed for comment: {exc}")
                 # Fallback to standard text LLM below
                 
         return self._render("generate_comment", persona=persona,
-                            caption=caption, author=author)
+                            caption=caption, author=author, 
+                            mention_instruction=mention_instruction)
 
     def describe_photo(self, url: str) -> str:
         """Generate an alt-text description for a photo URL (requires vision model)."""
         if not self.llm_v:
             return ""
-        cfg = self.prompts_config.get("describe_photo", DEFAULT_PROMPTS["describe_photo"])
+        cfg = self.prompts_config.get("describe_photo", {})
         prompt = ChatPromptTemplate.from_messages([
             ("system", cfg.get("system_template")),
             ("human", cfg.get("user_template")),
@@ -193,6 +181,19 @@ class LLMService:
         except Exception as exc:
             logger.warning(f"Vision LLM call failed: {exc}")
             return ""
+
+    def extract_emotion(self, text: str) -> str:
+        """Extract primary emotion from text."""
+        result = self._render("extract_emotion", text=text)
+        
+        # Clean up common wrapper words
+        emotion = result.strip().title()
+        valid_emotions = ["Joy", "Sadness", "Anger", "Fear", "Surprise", "Disgust", "Trust", "Anticipation", "Neutral"]
+        
+        for e in valid_emotions:
+            if e.upper() in result.upper():
+                return e
+        return "Neutral"
 
     def decide_follow(self, username: str, bio: str, topics: str,
                       cluster_id: int = 0) -> str:
@@ -206,15 +207,46 @@ class LLMService:
                               cluster_id: int = 0) -> str:
         """Decide whether to accept a follow request (ACCEPT / REJECT)."""
         persona = self._get_persona(cluster_id)
-        # Using a fallback text or custom template
-        prompt = f"Your persona: {persona}\nUser '{username}' with bio '{bio}' requested to follow you. Do you ACCEPT or REJECT? Reply with exactly ACCEPT or REJECT."
+        result = self._render("decide_follow_request", persona=persona,
+                              username=username, bio=bio or "").upper()
+        return "ACCEPT" if "ACCEPT" in result else "REJECT"
+
+    # ------------------------------------------------------------------
+    # Stage 5 & 6 Handlers
+    # ------------------------------------------------------------------
+
+    def extract_sentiment(self, text: str) -> float:
+        """Extract sentiment polarity as a float (1.0 = positive, -1.0 = negative, 0.0 = neutral)."""
+        result = self._render("extract_sentiment", text=text).upper()
+        if "POSITIVE" in result:
+            return 1.0
+        elif "NEGATIVE" in result:
+            return -1.0
+        else:
+            return 0.0
+
+    def infer_article_opinion(self, article_text: str, topic: str, opinion_options: List[str]) -> str:
+        """Infer the stance of a text on a topic based on available opinion options."""
+        options_str = ", ".join(opinion_options)
+        result = self._render("infer_article_opinion", article_text=article_text, topic=topic, opinion_options=options_str).strip()
+        for opt in opinion_options:
+            if opt.lower() in result.lower():
+                return opt
+        return opinion_options[len(opinion_options) // 2]  # Fallback to middle option
+
+    def evaluate_opinion(self, post_content: str, author_name: str, topic: str, current_opinion: float) -> float:
+        """Evolve the agent's opinion after reading a post."""
+        result = self._render("evaluate_opinion", post_content=post_content, author_name=author_name, topic=topic, current_opinion=current_opinion).strip()
         try:
-            from langchain_core.messages import SystemMessage, HumanMessage
-            resp = self.llm.invoke([SystemMessage(content=prompt)])
-            text = resp.content.upper()
-            return "ACCEPTED" if "ACCEPT" in text else "REJECTED"
-        except Exception as exc:
-            return "ACCEPTED"
+            # Attempt to extract float from response
+            import re
+            match = re.search(r"[-+]?\d*\.\d+|\d+", result)
+            if match:
+                score = float(match.group())
+                return max(0.0, min(1.0, score))
+        except ValueError:
+            pass
+        return current_opinion
 
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
         """Generate captions for a batch of requests sequentially."""

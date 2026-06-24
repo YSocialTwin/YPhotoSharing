@@ -76,12 +76,19 @@ class RecommendationService:
         
         if top_tags:
             trend_id = str(uuid.uuid4())
-            trends_str = ",".join([tag[0] for tag in top_tags])
-            trend_record = TrendingHashtag(
-                id=trend_id,
-                round=round_id,
-                trending_hashtags=trends_str
-            )
-            db.add(trend_record)
+            rank = 1
+            for tag, count in top_tags:
+                # Find the hashtag_id for the given tag
+                ht = db.query(Hashtag).filter_by(hashtag=tag).first()
+                if ht:
+                    trend_record = TrendingHashtag(
+                        id=str(uuid.uuid4()),
+                        hashtag_id=ht.id,
+                        round_id=round_id,
+                        photo_count=count,
+                        rank=rank
+                    )
+                    db.add(trend_record)
+                    rank += 1
             db.commit()
-            logger.info(f"Trending hashtags for round {round_id}: {trends_str}")
+            logger.info(f"Trending hashtags for round {round_id} updated.")

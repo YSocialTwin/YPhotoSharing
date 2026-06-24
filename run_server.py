@@ -18,14 +18,10 @@ from pathlib import Path
 
 import ray
 
-from YPhotoSharing.common_utils import validate_config_directory
+from YPhotoSharing.common_utils import validate_config_directory, setup_logging
 from YPhotoSharing.utils.init_db import database_exists, initialize_database
 from YPhotoSharing.YServer.server import OrchestratorServer
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger("YPhotoSharing.Server")
 
 
@@ -44,6 +40,10 @@ def main():
 
     with open(config_file) as f:
         config = json.load(f)
+        
+    global logger
+    enable_console = config.get("logging", {}).get("enable_console_log", True)
+    logger = setup_logging(config_dir, "server", enable_console)
 
     server_name = config.get("server_name", "orchestrator_server")
     namespace = config.get("namespace", "yphotosharing")

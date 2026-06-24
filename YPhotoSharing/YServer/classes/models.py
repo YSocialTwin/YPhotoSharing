@@ -229,6 +229,7 @@ class Photo(Base):
     
     # Phase 4: Virality
     viral_score = Column(Float, default=0.0)
+    sentiment_score = Column(Float, nullable=True) # Stage 5: Sentiment Annotation
     created_at = Column(DateTime, server_default=func.now())
     deleted_at = Column(DateTime)
     
@@ -473,6 +474,7 @@ class Comment(Base):
     )
     parent_comment_id = Column(String(36), ForeignKey("comments.id", ondelete="SET NULL"))
     body = Column(Text, nullable=False)
+    sentiment_score = Column(Float, nullable=True) # Stage 5: Sentiment Annotation
     num_likes = Column(Integer, default=0)
     is_deleted = Column(Boolean, default=False)
     round = Column(String(36))
@@ -718,3 +720,20 @@ class MemorySocialCard(Base):
     event_count = Column(Integer, default=0)
     summary_text = Column(Text, nullable=True)
     evidence_tail_json = Column(Text, nullable=True)
+
+
+class UserOpinion(Base):
+    """Agent opinions on various discussion topics."""
+
+    __tablename__ = "user_opinions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "topic", name="uq_user_topic_opinion"),
+    )
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True)
+    topic = Column(String(128), nullable=False, index=True)
+    opinion_score = Column(Float, nullable=False, default=0.5)
+
+    user = relationship("User_mgmt", backref=backref("opinions", cascade="all, delete-orphan"))
+

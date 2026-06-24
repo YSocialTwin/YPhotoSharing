@@ -37,6 +37,15 @@ async def review_follow_requests(
             await server.review_follow_request.remote(req["follower_id"], user_id, action, round_id)
             logger.debug(f"User {user_id} {action} follow request from {req['follower_id']}")
             
+            # Stage 7: Followback
+            if action == "accepted":
+                user_data = ray.get(server.get_user.remote(user_id))
+                prob_fb = user_data.get("probability_of_follow_back", 0.0) if user_data else 0.0
+                if prob_fb > 0:
+                    if random.random() < prob_fb:
+                        await server.follow_user.remote(user_id, req["follower_id"], round_id)
+                        logger.debug(f"User {user_id} followed back {req['follower_id']}")
+            
         return True
     except Exception as exc:
         logger.error(f"Failed to review follow requests for user {user_id}: {exc}")

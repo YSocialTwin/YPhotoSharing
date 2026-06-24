@@ -19,7 +19,8 @@
     "daily_activity_level": 2,
     "bio": "Travel & food lover 🌍🍜",
     "is_private": false,
-    "is_verified": false
+    "is_verified": false,
+    "interests": ["travel", "food"]
   },
   {
     "id": "user-0002",
@@ -41,7 +42,8 @@
     "daily_activity_level": 1,
     "bio": "Street photographer | Minimalism",
     "is_private": false,
-    "is_verified": false
+    "is_verified": false,
+    "interests": ["art", "technology"]
   },
   {
     "id": "user-0003",
@@ -63,6 +65,7 @@
     "daily_activity_level": 3,
     "bio": "Fitness & wellness influencer 💪",
     "is_private": false,
-    "is_verified": true
+    "is_verified": true,
+    "interests": ["fitness", "fashion"]
   }
 ]

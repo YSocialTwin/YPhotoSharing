@@ -207,6 +207,9 @@ class OrchestratorServer:
     def post_photo(self, photo_data: dict) -> str:
         return self._db.create_photo(photo_data)
 
+    def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
+        return self._db.add_photo_emotion(photo_id, emotion)
+
     def get_photo(self, photo_id: str) -> Optional[dict]:
         return self._db.get_photo(photo_id)
 
@@ -247,6 +250,9 @@ class OrchestratorServer:
 
     def view_story(self, story_id: str, viewer_id: str) -> bool:
         return self._db.record_story_view(story_id, viewer_id)
+
+    def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
+        return self._db.get_recent_stories(user_id, limit)
 
     # ------------------------------------------------------------------
     # Feeds & recommendations
@@ -321,6 +327,9 @@ class OrchestratorServer:
 
     def get_or_create_interest(self, name: str) -> str:
         return self._db.get_or_create_interest(name)
+        
+    def get_user_interests(self, user_id: str) -> List[str]:
+        return self._db.get_user_interests(user_id)
 
     def set_user_interests(self, user_id: str, interest_ids: List[str], round_id: str) -> None:
         self._db.set_user_interests(user_id, interest_ids, round_id)
@@ -335,3 +344,19 @@ class OrchestratorServer:
     def get_memory_events(self, run_id: str, agent_user_id: str,
                           limit: int = 100) -> List[dict]:
         return self._db.get_memory_events(run_id, agent_user_id, limit=limit)
+
+    # ------------------------------------------------------------------
+    # Stage 5 & 6 (Sentiment and Opinion)
+    # ------------------------------------------------------------------
+
+    def update_photo_sentiment(self, photo_id: str, sentiment_score: float) -> bool:
+        return self._db.update_photo_sentiment(photo_id, sentiment_score)
+
+    def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
+        return self._db.update_comment_sentiment(comment_id, sentiment_score)
+
+    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float) -> bool:
+        return self._db.update_user_opinion(user_id, topic, opinion_score)
+
+    def get_user_opinions(self, user_id: str) -> dict:
+        return self._db.get_user_opinions(user_id)

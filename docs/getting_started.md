@@ -19,9 +19,9 @@ cd YPhotoSharing
 pip install -r requirements.txt
 ```
 
-2. (Optional) For local multimodal/vision processing, ensure you have Hugging Face `diffusers` installed:
+2. (Optional) For local multimodal/vision processing, ensure you have Hugging Face `diffusers` installed. Use the following versions to avoid conflicts with older PyTorch installations:
 ```bash
-pip install diffusers transformers accelerate
+pip install "huggingface-hub<0.26.0" "transformers<4.45.0" "diffusers<0.28.0" "accelerate<0.30.0" torch torchvision
 ```
 
 ## Running the Baseline Simulation

@@ -42,6 +42,35 @@ async def post_comment(
     author = photo.get("username", "user")
     image_url = photo.get("media_url") or photo.get("image_url")
 
+    if agent_attrs is None:
+        agent_attrs = {}
+
+    try:
+        following_ids = await server.get_following.remote(user_id)
+        if following_ids:
+            import random
+            sample_ids = random.sample(following_ids, min(3, len(following_ids)))
+            following_usernames = []
+            for fid in sample_ids:
+                u = await server.get_user.remote(fid)
+                if u and u.get("username"):
+                    following_usernames.append(u["username"])
+            agent_attrs["following_usernames"] = following_usernames
+    except Exception as e:
+        logger.warning(f"Could not fetch following usernames for comment mentions: {e}")
+
+    # YSimulator Stage 4: Retrieve memory context
+    photo_author_id = photo.get("user_id")
+    if photo_author_id:
+        try:
+            memories = await server.get_memory_events.remote(run_id="default", agent_user_id=user_id, limit=50)
+            recipient_mems = [m for m in memories if m.get("other_user_id") == photo_author_id]
+            if recipient_mems:
+                mem_texts = [m.get("event_type", "interaction") for m in recipient_mems[:5]]
+                agent_attrs["memory_context"] = f"Past interactions with photo author: {', '.join(mem_texts)}"
+        except Exception as e:
+            logger.warning(f"Could not retrieve memories for comment: {e}")
+
     try:
         body = await llm_service.generate_comment.remote(
             caption=caption,
@@ -65,6 +94,42 @@ async def post_comment(
             round_id=round_id,
             parent_comment_id=parent_comment_id,
         )
+        
+        # YSimulator Stage 4: Store post-interaction summary
+        if photo_author_id and photo_author_id != user_id:
+            try:
+                event_data = {
+                    "run_id": "default",
+                    "agent_user_id": user_id,
+                    "other_user_id": photo_author_id,
+                    "event_type": "commented",
+                    "description": f"Commented: {body[:50]}...",
+                    "round_id": 0 # We don't have day/hour easily here, so 0 is fine
+                }
+                await server.add_memory_event.remote(event_data)
+            except Exception as e:
+                logger.warning(f"Could not save memory event for comment: {e}")
+
+        # Stage 5: Sentiment Annotation
+        if agent_attrs and agent_attrs.get("enable_sentiment"):
+            try:
+                sentiment_score = await llm_service.extract_sentiment.remote(body.strip())
+                await server.update_comment_sentiment.remote(comment_id, sentiment_score)
+            except Exception as e:
+                logger.warning(f"Failed to extract sentiment for comment {comment_id}: {e}")
+
+        # Stage 9: Evolve user interests
+        try:
+            import re
+            tags = re.findall(r"#(\w+)", caption)
+            topic = tags[0] if tags else photo.get("topic", "general")
+            
+            # Evolve interest
+            tid = await server.get_or_create_interest.remote(topic)
+            await server.set_user_interests.remote(user_id, [tid], round_id)
+        except Exception as e:
+            logger.warning(f"Failed to evolve interest in comment: {e}")
+
         logger.debug(f"User {user_id} commented on photo {photo_id}")
         return comment_id
     except Exception as exc:

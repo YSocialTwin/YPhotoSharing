@@ -19,6 +19,7 @@ async def react_to_photo(
     user_id: str,
     photo: dict,
     round_id: str,
+    agent_attrs: Optional[dict] = None,
 ) -> Optional[str]:
     """
     Have the agent decide how to react to *photo* and persist the decision.
@@ -54,6 +55,41 @@ async def react_to_photo(
             round_id=round_id,
         )
         logger.debug(f"User {user_id} reacted {reaction} to photo {photo_id}")
+
+        # Stage 9: Evolve user interests
+        try:
+            import re
+            tags = re.findall(r"#(\w+)", caption)
+            topic = tags[0] if tags else photo.get("topic", "general")
+            
+            # Evolve interest
+            tid = await server.get_or_create_interest.remote(topic)
+            await server.set_user_interests.remote(user_id, [tid], round_id)
+        except Exception as e:
+            logger.warning(f"Failed to evolve interest in react: {e}")
+            topic = "general"
+            
+        # Stage 6: Opinion Dynamics
+        if agent_attrs and agent_attrs.get("enable_opinion_dynamics") and caption:
+            try:
+                opinion_options = ["Strongly against", "Against", "Neutral", "In favor", "Strongly in favor"]
+                
+                # 1. Infer stance of the photo
+                stance = await llm_service.infer_article_opinion.remote(caption, topic, opinion_options)
+                
+                # 2. Get agent's current opinion on this topic
+                opinions = await server.get_user_opinions.remote(user_id)
+                current_opinion = opinions.get(topic, 0.5)
+                
+                # 3. Evaluate and evolve opinion
+                new_opinion = await llm_service.evaluate_opinion.remote(caption, photo.get("username", "user"), topic, current_opinion)
+                
+                # 4. Save
+                if new_opinion != current_opinion:
+                    await server.update_user_opinion.remote(user_id, topic, new_opinion)
+            except Exception as e:
+                logger.warning(f"Failed to process opinion dynamics in react: {e}")
+
         return reaction
     except Exception as exc:
         logger.error(f"Failed to persist reaction for user {user_id}: {exc}")

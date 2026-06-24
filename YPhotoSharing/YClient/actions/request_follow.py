@@ -24,6 +24,14 @@ async def request_follow(
             await server.follow_user.remote(follower_id, user_id, round_id)
             logger.debug(f"User {follower_id} followed {user_id}")
             
+            # Stage 7: Followback
+            prob_fb = user_data.get("probability_of_follow_back", 0.0)
+            if prob_fb > 0:
+                import random
+                if random.random() < prob_fb:
+                    await server.follow_user.remote(user_id, follower_id, round_id)
+                    logger.debug(f"User {user_id} followed back {follower_id}")
+            
         return True
     except Exception as exc:
         logger.error(f"Failed follow action for {follower_id} to {user_id}: {exc}")

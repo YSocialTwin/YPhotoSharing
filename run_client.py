@@ -20,13 +20,9 @@ from pathlib import Path
 
 import ray
 
-from YPhotoSharing.common_utils import validate_config_directory
+from YPhotoSharing.common_utils import validate_config_directory, setup_logging
 from YPhotoSharing.YClient.client import SimulationClient
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger("YPhotoSharing.Client")
 
 
@@ -45,6 +41,10 @@ def main():
 
     with open(config_file) as f:
         config = json.load(f)
+        
+    global logger
+    enable_console = config.get("logging", {}).get("enable_console_log", True)
+    logger = setup_logging(config_dir, "client", enable_console)
 
     # Ray connection – read address written by server
     ray_config_file = config_dir / "ray_config.temp"
@@ -64,7 +64,16 @@ def main():
     server_name = config.get("server_name", "Orchestrator")
 
     llm_config = config.get("llm", {})
-    prompts_config = config.get("prompts", {})
+    
+    # Phase 8: Externalize Prompts
+    prompts_file = config_dir / "prompts_ygram.json"
+    if prompts_file.exists():
+        with open(prompts_file) as f:
+            prompts_config = json.load(f)
+    else:
+        prompts_config = config.get("prompts", {})
+        logger.warning(f"prompts_ygram.json not found in {config_dir}, falling back to client_config prompts or empty")
+        
     llm_v_config = config.get("llm_vision")
     logging_config = config.get("logging", {})
     simulation_config = config.get("simulation", {})

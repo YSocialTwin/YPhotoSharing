@@ -63,3 +63,39 @@ def load_json_config(config_file: Path) -> dict:
     except OSError as e:
         print(f"❌ Error: Cannot read configuration file '{config_file}': {e}")
         sys.exit(1)
+
+
+def setup_logging(config_dir: Path, component_name: str, enable_console: bool = True):
+    """
+    Configure execution logging equivalently to YSimulator.
+    Creates a 'logs' directory inside the config directory and writes execution logs.
+    """
+    import logging
+    import os
+    from logging.handlers import RotatingFileHandler
+
+    log_dir = config_dir / "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    log_file = log_dir / f"execution_{component_name}.log"
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # Clear existing handlers
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+    # File Handler
+    fh = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    # Console Handler
+    if enable_console:
+        ch = logging.StreamHandler(sys.stdout)
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+
+    return logging.getLogger(f"YPhotoSharing.{component_name.capitalize()}")

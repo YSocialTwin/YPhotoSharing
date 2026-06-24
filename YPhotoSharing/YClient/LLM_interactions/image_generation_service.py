@@ -63,7 +63,8 @@ class ImageGenerationService:
                 img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
                 return img_str
             except Exception as e:
-                logger.error(f"Local image generation failed: {e}. Falling back to stub.")
+                logger.error(f"Local image generation failed: {e}.")
+                return None
 
         if self.endpoint_url:
             pass
