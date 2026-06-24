@@ -254,5 +254,7 @@ The top level should contain an `agents` array, and may also include a
 - **Prompt personas**: the client builds LLM personas from the full agent record, including age, gender, nationality, education, profession, personality traits, interests, bio, account status, and any `custom_features` you provide. `photo_sharing` metadata is also surfaced when present.
 - **`user_type`**: Set to `llm` for prompt-driven agents or `rule_based` for deterministic agents. The loader maps this to the internal `llm` flag.
 - **`recsys_type`**: The platform's coarse persona cluster. YPhotoSharing does not require a separate `cluster` field in `agents.json`; the recsys type already serves that role for prompts and recommendation bias.
-- **`attention_budget`**: Controls how many actions the agent can perform per slot. Higher numbers yield more hyperactive agents.
+- **`daily_activity_level`**: Fallback activity weight used by the scheduler when an agent does not have a hard hourly `activity_profile` match. Higher values make the agent more likely to be selected for a slot.
+- **`round_actions`**: Upper bound for how many actions an agent will attempt once selected for a slot. The actual count is sampled around that bound.
+- **`attention_budget`**: Controls the total action cost the agent can spend per slot. Even if `round_actions` is high, expensive actions stop the session early when the budget runs out.
 - **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.

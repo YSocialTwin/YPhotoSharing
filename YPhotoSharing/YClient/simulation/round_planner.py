@@ -56,6 +56,11 @@ class SimulationRoundPlanner:
             user_data = getattr(agent, "user_data", {}) or {}
             if user_data.get("is_churned") or user_data.get("left_on") is not None:
                 continue
+            daily_activity_level = int(user_data.get("daily_activity_level", 1) or 1)
+            if daily_activity_level <= 0:
+                continue
+
+            activity_factor = min(1.0, max(0.0, daily_activity_level / 5.0))
             u_profile = user_data.get("activity_profile")
 
             if u_profile and u_profile in profiles:
@@ -71,8 +76,8 @@ class SimulationRoundPlanner:
                     continue
                 continue
 
-            prob = hourly_activity.get(str(hour), 0.04)
-            if random.random() < float(prob):
+            probability = max(0.0, min(1.0, float(hourly_activity.get(str(hour), 0.04)) * activity_factor))
+            if random.random() < probability:
                 active_agents.append(agent)
 
         return active_agents

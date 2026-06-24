@@ -122,8 +122,17 @@ class Agent:
         await self._update_satisfaction()
 
         # Phase 10: Attention Budget
-        # Replace fixed number of actions with an attention budget
+        # round_actions limits how many actions the agent can attempt in the slot;
+        # attention_budget can stop the session earlier when costs are exhausted.
         attention_budget = self.user_data.get("attention_budget", 100)
+        round_actions = int(self.user_data.get("round_actions", self._round_actions) or self._round_actions)
+        if self.user_data.get("is_page"):
+            round_actions = 1
+        else:
+            round_actions = max(1, round_actions)
+            lower = max(round_actions - 2, 1)
+            round_actions = random.randint(lower, round_actions)
+
         self.interacted_users = set()
         
         # Action Costs
@@ -140,10 +149,12 @@ class Agent:
             "unfollow": 5
         }
 
-        while attention_budget > 0:
+        for _ in range(round_actions):
+            if attention_budget <= 0:
+                break
             action = self._sample_action()
             cost = costs.get(action, 10)
-            
+
             if attention_budget < cost:
                 break # Not enough attention for this action, end session
                 

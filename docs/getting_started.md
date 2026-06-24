@@ -37,9 +37,12 @@ Navigate to the `example/` directory. You will find:
   Photo-sharing-specific fields can be attached directly or inside a
   `photo_sharing` block and will be preserved by the loader. The current
   example mirrors the implemented runtime fields, including `attention_budget`,
-  `is_private`, `is_verified`, `recsys_type`, `custom_features`, and
-  `photo_sharing.creator_tier`. Churn and new-user injection are configured in
-  `client_config.json` under `simulation.agents` and default to disabled.
+  `daily_activity_level`, `round_actions`, `is_private`, `is_verified`,
+  `recsys_type`, `custom_features`, and `photo_sharing.creator_tier`.
+  `daily_activity_level` affects slot selection, `round_actions` caps per-slot
+  action attempts, and `attention_budget` limits the total cost of those
+  attempts. Churn and new-user injection are configured in `client_config.json`
+  under `simulation.agents` and default to disabled.
 
 ### 2. Start the Orchestrator Server
 Open a terminal and start the server. This automatically starts a local Ray cluster.
