@@ -38,7 +38,10 @@
         "food": 0.6
       },
       "stubborn_topics": [],
-      "custom_features": {},
+      "custom_features": {
+        "aesthetic": "warm travel diary",
+        "tone": "curious and friendly"
+      },
       "probability_of_secondary_follow": 0.15,
       "probability_of_follow_back": 0.2,
       "is_churned": false,
@@ -91,7 +94,10 @@
         "technology": 0.55
       },
       "stubborn_topics": [],
-      "custom_features": {},
+      "custom_features": {
+        "aesthetic": "minimal street photography",
+        "tone": "observant"
+      },
       "probability_of_secondary_follow": 0.1,
       "probability_of_follow_back": 0.12,
       "is_churned": false,
@@ -144,7 +150,11 @@
         "fashion": 0.65
       },
       "stubborn_topics": [],
-      "custom_features": {},
+      "custom_features": {
+        "aesthetic": "clean fitness editorial",
+        "tone": "encouraging",
+        "brand_focus": "wellness"
+      },
       "probability_of_secondary_follow": 0.2,
       "probability_of_follow_back": 0.18,
       "is_churned": false,
