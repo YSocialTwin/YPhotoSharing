@@ -32,7 +32,9 @@ YPhotoSharing requires at least two separate processes: the central **Orchestrat
 Navigate to the `example/` directory. You will find:
 - `server_config.json`: Server port and logic flags.
 - `client_config.json`: Agent population settings, rounds, and LLM backend choice.
-- `users.json`: A static list defining the personas of the simulated agents.
+- `agents.json`: The YSimulator-style agent population document for the client.
+  Photo-sharing-specific fields can be attached directly or inside a
+  `photo_sharing` block and will be preserved by the loader.
 
 ### 2. Start the Orchestrator Server
 Open a terminal and start the server. This automatically starts a local Ray cluster.

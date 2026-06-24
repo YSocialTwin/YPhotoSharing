@@ -655,7 +655,7 @@ enabling more realistic agent behaviour.
 | `client_id` | string | auto-UUID | Unique client identifier |
 | `server_name` | string | `"Orchestrator"` | Server Ray actor name |
 | `namespace` | string | `"yphotosharing"` | Ray namespace |
-| `users_file` | string | `"users.json"` | Path to user population JSON |
+| `agents_file` | string | `"agents.json"` | Path to client agent population JSON |
 | `llm.backend` | string | `"ollama"` | `ollama` / `openai` |
 | `llm.address` | string | `"localhost"` | LLM server address |
 | `llm.port` | int | `11434` | LLM server port |

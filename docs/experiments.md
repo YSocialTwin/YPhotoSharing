@@ -57,7 +57,7 @@ This setup brings the simulation closer to real-world Instagram by enabling loca
 ---
 
 ## Scenario C: High-Concurrency Stress Test
-If you want to simulate thousands of agents, you must distribute the load across multiple clients. Create multiple config directories (e.g., `client_1/`, `client_2/`) and split your `users.json` equally among them.
+If you want to simulate thousands of agents, you must distribute the load across multiple clients. Create multiple config directories (e.g., `client_1/`, `client_2/`) and split your `agents.json` equally among them.
 
 1. Set `"min_clients_to_start": 3` in the `server_config.json`.
 2. Start the server.

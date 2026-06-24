@@ -31,7 +31,7 @@ This file controls the agent logic, simulation duration, modalities, and LLM bac
   "server_name": "orchestrator_server",
   "namespace": "yphotosharing",
   "address": "auto",
-  "users_file": "users.json",
+  "agents_file": "agents.json",
   "simulation": {
     "num_rounds": 48,
     "start_day": 0,
@@ -176,21 +176,33 @@ The affective dynamics module accepts a `stress_reward` section either at the to
 - **`backward_rounds`**: Controls how many rounds the client queries when reconstructing current affective state.
 - **`system`**: Allows tuning the affective response curves without changing client logic.
 
-## 3. `users.json`
+## 3. `agents.json`
 
-A list of dictionaries defining the initial agent population. 
+A YSimulator-style JSON document defining the initial agent population.
+The top level should contain an `agents` array, and may also include a
+`generation_config` block for compatibility with YSimulator population files.
 
 ```json
-[
-  {
-    "id": "user-0001",
-    "username": "travel_guru",
-    "is_private": false,
-    "recsys_type": 1,
-    "attention_budget": 100
+{
+  "agents": [
+    {
+      "id": "user-0001",
+      "username": "travel_guru",
+      "recsys_type": "0",
+      "attention_budget": 100,
+      "photo_sharing": {
+        "cover_image": "travel_cover.jpg",
+        "story_visibility": "followers"
+      }
+    }
+  ],
+  "generation_config": {
+    "num_additional_agents": 0,
+    "default_settings": {}
   }
-]
+}
 ```
 
-- **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.
+- **`photo_sharing`**: Optional nested block for photo-platform-only fields such as `cover_image`, `story_visibility`, `favorite_filters`, or `creator_tier`.
 - **`attention_budget`**: Controls how many actions the agent can perform per slot. Higher numbers yield more hyperactive agents.
+- **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.
