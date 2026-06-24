@@ -155,7 +155,7 @@
     "num_additional_agents": 0,
     "default_settings": {
       "password": "simulation_agent",
-      "user_type": "regular",
+      "user_type": "llm",
       "language": "en",
       "round_actions": 3,
       "daily_activity_level": 1,
