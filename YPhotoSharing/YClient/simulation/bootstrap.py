@@ -4,10 +4,48 @@ import random
 from typing import Dict, List, Optional
 
 
+def normalize_agent_population_document(population):
+    """Normalize a population config into the YSimulator-style document format."""
+    if isinstance(population, list):
+        return {
+            "agents": population,
+            "generation_config": {
+                "num_additional_agents": 0,
+                "default_settings": {},
+            },
+        }
+
+    if isinstance(population, dict):
+        normalized = dict(population)
+        normalized.setdefault("agents", [])
+        normalized.setdefault(
+            "generation_config",
+            {
+                "num_additional_agents": 0,
+                "default_settings": {},
+            },
+        )
+        if not isinstance(normalized["generation_config"], dict):
+            normalized["generation_config"] = {
+                "num_additional_agents": 0,
+                "default_settings": {},
+            }
+        normalized["generation_config"].setdefault("num_additional_agents", 0)
+        normalized["generation_config"].setdefault("default_settings", {})
+        return normalized
+
+    raise TypeError("Agent population must be a list or a dict with an 'agents' key")
+
+
 def normalize_agent_config(user_config: dict, simulation_config: Optional[dict]) -> dict:
     """Return a simulation-ready agent config without mutating the input."""
     simulation_config = simulation_config or {}
     enriched = dict(user_config)
+
+    photo_sharing_cfg = enriched.get("photo_sharing")
+    if isinstance(photo_sharing_cfg, dict):
+        for key, value in photo_sharing_cfg.items():
+            enriched.setdefault(key, value)
 
     if "is_private" not in enriched:
         enriched["is_private"] = random.random() < 0.20
@@ -37,6 +75,28 @@ def normalize_agent_config(user_config: dict, simulation_config: Optional[dict])
     enriched["enable_memory_annotations"] = bool(
         simulation_config.get("enable_memory_annotations", True)
     )
+    enriched.setdefault("email", "")
+    enriched.setdefault("password", "simulation_agent")
+    enriched.setdefault("user_type", "regular")
+    enriched.setdefault("age", 0)
+    enriched.setdefault("gender", "unknown")
+    enriched.setdefault("nationality", "")
+    enriched.setdefault("oe", "medium")
+    enriched.setdefault("co", "medium")
+    enriched.setdefault("ex", "medium")
+    enriched.setdefault("ag", "medium")
+    enriched.setdefault("ne", "medium")
+    enriched.setdefault("language", "en")
+    enriched.setdefault("round_actions", 3)
+    enriched.setdefault("daily_activity_level", 1)
+    enriched.setdefault("bio", "")
+    enriched.setdefault("is_verified", False)
+    enriched.setdefault("attention_budget", 100)
+    enriched.setdefault("frecsys_type", enriched.get("recsys_type", "default"))
+    enriched.setdefault("feed_url", None)
+    enriched.setdefault("opinions", {})
+    enriched.setdefault("stubborn_topics", [])
+    enriched.setdefault("custom_features", {})
 
     agents_cfg = simulation_config.get("agents", {})
     enriched["probability_of_secondary_follow"] = agents_cfg.get(

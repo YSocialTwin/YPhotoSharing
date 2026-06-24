@@ -22,6 +22,7 @@ import ray
 
 from YPhotoSharing.common_utils import validate_config_directory, setup_logging
 from YPhotoSharing.YClient.client import SimulationClient
+from YPhotoSharing.YClient.simulation.bootstrap import normalize_agent_population_document
 
 logger = logging.getLogger("YPhotoSharing.Client")
 
@@ -80,13 +81,18 @@ def main():
     logging_config = config.get("logging", {})
     simulation_config = config.get("simulation", {})
 
-    # Load user population
-    users_file = config_dir / config.get("users_file", "users.json")
-    if not users_file.exists():
-        logger.error(f"Users file not found: {users_file}")
-        sys.exit(1)
-    with open(users_file) as f:
-        users = json.load(f)
+    # Load agent population
+    population_filename = config.get("agents_file") or config.get("users_file") or "agents.json"
+    population_file = config_dir / population_filename
+    if not population_file.exists():
+        legacy_file = config_dir / "users.json"
+        if population_filename == "agents.json" and legacy_file.exists():
+            population_file = legacy_file
+        else:
+            logger.error(f"Agent population file not found: {population_file}")
+            sys.exit(1)
+    with open(population_file) as f:
+        users = normalize_agent_population_document(json.load(f))
 
     num_rounds = simulation_config.get("num_rounds", 24)
     start_day = simulation_config.get("start_day", 0)

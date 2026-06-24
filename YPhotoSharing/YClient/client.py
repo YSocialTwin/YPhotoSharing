@@ -19,6 +19,7 @@ from YPhotoSharing.common_utils import build_structured_file_logger, setup_loggi
 from YPhotoSharing.YClient.agent_management.agent import Agent
 from YPhotoSharing.YClient.simulation.bootstrap import (
     build_initial_interest_ids,
+    normalize_agent_population_document,
     normalize_agent_config,
 )
 from YPhotoSharing.YClient.simulation.round_planner import SimulationRoundPlanner
@@ -170,15 +171,17 @@ class SimulationClient:
     # Agent population
     # ------------------------------------------------------------------
 
-    async def load_agents(self, user_configs: List[dict]) -> int:
-        """Register agents from user config dicts. Returns number loaded."""
+    async def load_agents(self, user_configs) -> int:
+        """Register agents from a YSimulator-style population document."""
+        population = normalize_agent_population_document(user_configs)
+        user_records = list(population.get("agents", []))
         self._agents = []
         import random
 
         # Stage 6: Initialize Opinions (create a baseline round once)
         init_round_id = await self.server.get_or_create_round.remote(-1, -1)
         op_dyn = self.simulation_config.get("opinion_dynamics", {})
-        for u in user_configs:
+        for u in user_records:
             u = normalize_agent_config(u, self.simulation_config)
             # Register user in the database
             try:

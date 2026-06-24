@@ -1,6 +1,10 @@
 from pathlib import Path
 import tempfile
 
+from YPhotoSharing.YClient.simulation.bootstrap import (
+    normalize_agent_config,
+    normalize_agent_population_document,
+)
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 
 
@@ -43,3 +47,33 @@ def test_missing_opinion_returns_none():
 
         assert db.get_latest_agent_opinion(user_id, "missing-topic") is None
 
+
+def test_photo_sharing_fields_can_be_embedded_in_agent_population_records():
+    record = normalize_agent_config(
+        {
+            "id": "user-1",
+            "username": "alice",
+            "photo_sharing": {
+                "cover_image": "alice_cover.jpg",
+                "favorite_filters": ["warm"],
+                "story_visibility": "followers",
+                "creator_tier": "pro",
+            },
+        },
+        simulation_config={},
+    )
+
+    assert record["cover_image"] == "alice_cover.jpg"
+    assert record["favorite_filters"] == ["warm"]
+    assert record["story_visibility"] == "followers"
+    assert record["creator_tier"] == "pro"
+    assert record["photo_sharing"]["creator_tier"] == "pro"
+
+
+def test_legacy_list_population_is_normalized_to_agents_document():
+    population = normalize_agent_population_document(
+        [{"id": "user-1", "username": "alice"}]
+    )
+
+    assert population["agents"][0]["username"] == "alice"
+    assert population["generation_config"]["num_additional_agents"] == 0

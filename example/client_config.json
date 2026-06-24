@@ -3,7 +3,7 @@
   "server_name": "orchestrator_server",
   "namespace": "yphotosharing",
   "address": "auto",
-  "users_file": "users.json",
+  "agents_file": "agents.json",
   "simulation": {
     "num_rounds": 48,
     "start_day": 0,
