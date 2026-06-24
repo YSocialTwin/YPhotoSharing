@@ -39,7 +39,7 @@ class Emotion(Base):
     icon = Column(Text)
 
     photo_emotions = relationship(
-        "PhotoEmotion", back_populates="emotion", cascade="all, delete-orphan"
+        "PhotoEmotion", back_populates="emotion_obj", cascade="all, delete-orphan"
     )
 
 
@@ -278,6 +278,7 @@ class Story(Base):
     duration_seconds = Column(Integer, default=5)
     sticker_type = Column(String(50))                  # "poll" | "question" | "slider" | None
     sticker_data = Column(Text)                        # JSON blob for sticker payload
+    caption = Column(Text)                             # Optional text on the story
     view_count = Column(Integer, default=0)
     expires_at = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())
@@ -562,7 +563,7 @@ class PhotoEmotion(Base):
     viral_score = Column(Float, default=0.0)
 
     photo = relationship("Photo", back_populates="emotions")
-    emotion = relationship("Emotion", back_populates="photo_emotions")
+    emotion_obj = relationship("Emotion", back_populates="photo_emotions")
 
 
 # ================================================
@@ -579,9 +580,6 @@ class UserInterest(Base):
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"))
     interest_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"))
     round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"))
-    
-    # Phase 4: Opinion dynamics
-    opinion_score = Column(Float, default=0.0) # Sentiment valence (-1.0 to 1.0)
 
     user = relationship("User_mgmt", back_populates="user_interests")
     interest = relationship("Interest", back_populates="user_interests")
@@ -727,13 +725,44 @@ class UserOpinion(Base):
 
     __tablename__ = "user_opinions"
     __table_args__ = (
-        UniqueConstraint("user_id", "topic", name="uq_user_topic_opinion"),
+        UniqueConstraint("user_id", "topic", "round_id", name="uq_user_topic_round_opinion"),
     )
 
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True)
     topic = Column(String(128), nullable=False, index=True)
+    round_id = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
     opinion_score = Column(Float, nullable=False, default=0.5)
 
     user = relationship("User_mgmt", backref=backref("opinions", cascade="all, delete-orphan"))
+    round_obj = relationship("Round")
 
+
+class StressReward(Base):
+    """Per-user stress/reward event rows and aggregates."""
+
+    __tablename__ = "stress_reward"
+    __table_args__ = (
+        CheckConstraint("variable IN ('stress', 'reward')", name="ck_stress_reward_variable"),
+        CheckConstraint("type IN ('aggregate', 'variation')", name="ck_stress_reward_type"),
+        CheckConstraint(
+            "(type = 'aggregate' AND value >= 0 AND value <= 1) "
+            "OR (type = 'variation' AND value >= -1 AND value <= 1)",
+            name="ck_stress_reward_value",
+        ),
+    )
+
+    id = Column(String(36), primary_key=True)
+    uid = Column(
+        String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    variable = Column(String(16), nullable=False, index=True)
+    value = Column(Float, nullable=False)
+    type = Column(String(16), nullable=False, index=True)
+    action = Column(String(64), nullable=True)
+    tid = Column(
+        String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    user = relationship("User_mgmt", backref=backref("stress_reward_events", cascade="all, delete-orphan"))
+    round_obj = relationship("Round")

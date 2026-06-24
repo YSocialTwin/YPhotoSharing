@@ -20,6 +20,10 @@ async def post_comment(
     cluster_id: int = 0,
     parent_comment_id: Optional[str] = None,
     agent_attrs: Optional[dict] = None,
+    opinion_manager = None,
+    stress_reward_system=None,
+    stress_reward_enabled: bool = False,
+    stress_reward_backward_rounds: int = 24,
 ) -> Optional[str]:
     """
     Generate and persist a comment on *photo*.
@@ -87,6 +91,7 @@ async def post_comment(
         return None
 
     try:
+        sentiment_score = None
         comment_id = await server.post_comment.remote(
             user_id=user_id,
             photo_id=photo_id,
@@ -120,15 +125,75 @@ async def post_comment(
 
         # Stage 9: Evolve user interests
         try:
-            import re
-            tags = re.findall(r"#(\w+)", caption)
-            topic = tags[0] if tags else photo.get("topic", "general")
-            
-            # Evolve interest
-            tid = await server.get_or_create_interest.remote(topic)
-            await server.set_user_interests.remote(user_id, [tid], round_id)
+            topic_ids = await server.get_photo_topics.remote(photo_id)
+            if not topic_ids:
+                import re
+                tags = re.findall(r"#(\w+)", caption)
+                topic_name = tags[0] if tags else photo.get("topic", "general")
+                tid = await server.get_or_create_interest.remote(topic_name)
+                topic_ids = [tid]
+            if topic_ids:
+                await server.set_user_interests.remote(user_id, topic_ids, round_id)
         except Exception as e:
             logger.warning(f"Failed to evolve interest in comment: {e}")
+
+        if (
+            stress_reward_enabled
+            and stress_reward_system
+            and photo_author_id
+            and photo_author_id != user_id
+        ):
+            try:
+                tone = "neutral"
+                body_lower = body.strip().lower()
+                if sentiment_score == 1.0:
+                    tone = "positive"
+                elif sentiment_score == -1.0:
+                    tone = "hostile" if any(k in body_lower for k in ("hate", "stupid", "idiot", "trash", "awful")) else "critical"
+                elif any(k in body_lower for k in ("great", "love", "nice", "support", "awesome")):
+                    tone = "supportive"
+
+                target_state = stress_reward_system.compute_current_stress_reward(
+                    server=server,
+                    agent_id=str(photo_author_id),
+                    current_tid=str(round_id),
+                    backward_rounds=stress_reward_backward_rounds,
+                )
+                deltas = stress_reward_system.compute_comment_delta(
+                    tone=tone,
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                    directness=1.0,
+                    support_strength=1.0 if tone == "supportive" else 0.0,
+                )
+                variations = []
+                if abs(float(deltas.get("delta_stress", 0.0))) > 1e-9:
+                    variations.append({"variable": "stress", "value": float(deltas["delta_stress"])})
+                if abs(float(deltas.get("delta_reward", 0.0))) > 1e-9:
+                    variations.append({"variable": "reward", "value": float(deltas["delta_reward"])})
+                if variations:
+                    await server.set_stress_reward_variations.remote(
+                        str(photo_author_id),
+                        round_id,
+                        variations,
+                        action_name=f"comment:{tone}",
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to persist stress/reward for comment: {e}")
+
+        # Stage 6: Opinion Dynamics
+        if opinion_manager and opinion_manager.is_enabled():
+            try:
+                updates = opinion_manager.calculate_opinion_updates(
+                    agent_id=user_id,
+                    parent_post_id=photo_id,
+                    parent_post_data=photo
+                )
+                if updates:
+                    for topic_name, new_val in updates.items():
+                        await server.update_user_opinion.remote(user_id, topic_name, new_val, round_id)
+            except Exception as e:
+                logger.warning(f"Failed to process opinion dynamics in comment: {e}")
 
         logger.debug(f"User {user_id} commented on photo {photo_id}")
         return comment_id

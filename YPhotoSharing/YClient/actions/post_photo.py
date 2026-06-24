@@ -106,6 +106,8 @@ async def post_photo(
         "caption": caption,
         "filter_name": filter_name,
         "location_name": location_name,
+        "topic": topic,
+        "topics": [topic],
     }
 
     try:

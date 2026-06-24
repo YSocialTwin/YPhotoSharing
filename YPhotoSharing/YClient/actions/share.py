@@ -16,6 +16,9 @@ async def share_photo(
     server,
     user_id: str,
     round_id: str,
+    stress_reward_system=None,
+    stress_reward_enabled: bool = False,
+    stress_reward_backward_rounds: int = 24,
 ) -> Optional[dict]:
     """
     Share a recommended photo.
@@ -42,6 +45,12 @@ async def share_photo(
         parent_photo = await server.get_photo.remote(photo_id)
         if not parent_photo:
             return None
+
+        parent_topic_ids = []
+        try:
+            parent_topic_ids = await server.get_photo_topics.remote(photo_id)
+        except Exception:
+            parent_topic_ids = []
             
         photo_data = {
             "id": str(uuid.uuid4()),
@@ -52,9 +61,45 @@ async def share_photo(
             "parent_photo_id": photo_id,
             "filter_name": parent_photo.get("filter_name"),
             "location_name": parent_photo.get("location_name"),
+            "topic_ids": parent_topic_ids,
         }
         
         new_photo_id = await server.post_photo.remote(photo_data)
+
+        if (
+            stress_reward_enabled
+            and stress_reward_system
+            and parent_photo.get("user_id")
+            and parent_photo.get("user_id") != user_id
+        ):
+            try:
+                target_state = stress_reward_system.compute_current_stress_reward(
+                    server=server,
+                    agent_id=str(parent_photo.get("user_id")),
+                    current_tid=str(round_id),
+                    backward_rounds=stress_reward_backward_rounds,
+                )
+                deltas = stress_reward_system.compute_share_delta(
+                    tone="positive",
+                    current_stress=target_state["stress"],
+                    current_reward=target_state["reward"],
+                    public_exposure=1.0,
+                )
+                variations = []
+                if abs(float(deltas.get("delta_stress", 0.0))) > 1e-9:
+                    variations.append({"variable": "stress", "value": float(deltas["delta_stress"])})
+                if abs(float(deltas.get("delta_reward", 0.0))) > 1e-9:
+                    variations.append({"variable": "reward", "value": float(deltas["delta_reward"])})
+                if variations:
+                    await server.set_stress_reward_variations.remote(
+                        str(parent_photo.get("user_id")),
+                        round_id,
+                        variations,
+                        action_name="share:positive",
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to persist stress/reward for share {photo_id}: {e}")
+
         logger.debug(f"User {user_id} shared photo {photo_id} as {new_photo_id}")
         return {"shared_photo_id": photo_id, "new_photo_id": new_photo_id}
         

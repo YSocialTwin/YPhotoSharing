@@ -55,15 +55,23 @@ class Agent:
         llm_service,
         action_weights: Optional[Dict[str, float]] = None,
         image_gen_service = None,
+        opinion_manager = None,
+        stress_reward_system = None,
+        stress_reward_enabled: bool = False,
+        stress_reward_backward_rounds: int = 24,
     ):
         self.user_id: str = user_data["id"]
         self.username: str = user_data.get("username", "agent")
+        self.opinion_manager = opinion_manager
         self.cluster_id: int = int(user_data.get("recsys_type") or 0)
         self.user_data = user_data
         self.server = server
         self.llm_service = llm_service
         self.image_gen_service = image_gen_service
         self.action_weights = action_weights or {}
+        self.stress_reward_system = stress_reward_system
+        self.stress_reward_enabled = stress_reward_enabled
+        self.stress_reward_backward_rounds = stress_reward_backward_rounds
         self._round_actions = user_data.get("round_actions", 3)
 
     # ------------------------------------------------------------------
@@ -256,6 +264,10 @@ class Agent:
             photo=photo,
             round_id=round_id,
             agent_attrs=self.user_data,
+            opinion_manager=self.opinion_manager,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
         if reaction:
             if hasattr(self, "interacted_users") and "user_id" in photo:
@@ -278,6 +290,10 @@ class Agent:
             round_id=round_id,
             cluster_id=self.cluster_id,
             agent_attrs=self.user_data,
+            opinion_manager=self.opinion_manager,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
         if comment_id:
             if hasattr(self, "interacted_users") and "user_id" in photo:
@@ -304,6 +320,9 @@ class Agent:
             self.server,
             user_id=self.user_id,
             round_id=round_id,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
 
     async def _action_report(self, round_id: str) -> Optional[dict]:
@@ -313,6 +332,9 @@ class Agent:
             user_id=self.user_id,
             round_id=round_id,
             agent_attrs=self.user_data,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
 
     # ------------------------------------------------------------------
@@ -352,7 +374,11 @@ class Agent:
             round_id=round_id,
             day=day,
             slot=hour,
-            cluster_id=self.cluster_id
+            cluster_id=self.cluster_id,
+            opinion_manager=self.opinion_manager,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
         if success:
             return {"photo_id": photo["id"], "parent_comment_id": parent_comment["id"]}

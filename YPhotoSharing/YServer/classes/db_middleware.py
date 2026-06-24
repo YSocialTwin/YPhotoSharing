@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, and_, or_, func
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -137,7 +137,12 @@ class DatabaseMiddleware:
         """Insert a new user; returns the user UUID."""
         with self.session_scope() as s:
             uid = user_data.get("id") or str(uuid.uuid4())
-            s.add(User_mgmt(id=uid, **{k: v for k, v in user_data.items() if k != "id"}))
+            
+            valid_keys = {c.name for c in User_mgmt.__table__.columns}
+            filtered_data = {k: v for k, v in user_data.items() if k in valid_keys and k != "id"}
+            
+            user_obj = User_mgmt(id=uid, **filtered_data)
+            s.add(user_obj)
             return uid
 
     def get_user(self, user_id: str) -> Optional[dict]:
@@ -214,17 +219,35 @@ class DatabaseMiddleware:
 
     def create_photo(self, photo_data: dict) -> str:
         import re
+        from YPhotoSharing.YServer.classes.models import Hashtag, PhotoHashtag
         with self.session_scope() as s:
             pid = photo_data.get("id") or str(uuid.uuid4())
-            s.add(Photo(id=pid, **{k: v for k, v in photo_data.items() if k != "id"}))
+            valid_keys = {c.name for c in Photo.__table__.columns}
+            filtered_data = {k: v for k, v in photo_data.items() if k in valid_keys and k != "id"}
+            s.add(Photo(id=pid, **filtered_data))
             
+            # Extract and save hashtags from caption
+            caption = photo_data.get("caption", "")
+            if caption:
+                extracted_hashtags = set(re.findall(r"#(\w+)", caption))
+                for h_text in extracted_hashtags:
+                    h_text = h_text.lower()
+                    h_obj = s.query(Hashtag).filter_by(hashtag=h_text).first()
+                    if not h_obj:
+                        h_obj = Hashtag(id=str(uuid.uuid4()), hashtag=h_text)
+                        s.add(h_obj)
+                        s.flush()
+                    s.add(PhotoHashtag(id=str(uuid.uuid4()), photo_id=pid, hashtag_id=h_obj.id))
+
             # Phase 4: Handle sharing (increment parent num_shares)
             parent_id = photo_data.get("parent_photo_id")
             if parent_id:
                 parent = s.query(Photo).filter_by(id=parent_id).first()
                 if parent:
                     parent.num_shares += 1
-                    
+
+            self._persist_photo_topics(s, pid, photo_data)
+
             # Extract hashtags
             caption = photo_data.get("caption", "")
             tags = set(re.findall(r"#(\w+)", caption))
@@ -241,9 +264,15 @@ class DatabaseMiddleware:
             return pid
 
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
+        from YPhotoSharing.YServer.classes.models import Emotion
         with self.session_scope() as s:
+            emotion_obj = s.query(Emotion).filter_by(emotion=emotion).first()
+            if not emotion_obj:
+                emotion_obj = Emotion(id=str(uuid.uuid4()), emotion=emotion)
+                s.add(emotion_obj)
+                s.flush()
             eid = str(uuid.uuid4())
-            s.add(PhotoEmotion(id=eid, photo_id=photo_id, emotion=emotion))
+            s.add(PhotoEmotion(id=eid, photo_id=photo_id, emotion_id=emotion_obj.id))
             return True
 
     def get_photo(self, photo_id: str) -> Optional[dict]:
@@ -338,7 +367,9 @@ class DatabaseMiddleware:
     def create_story(self, story_data: dict) -> str:
         with self.session_scope() as s:
             sid = story_data.get("id") or str(uuid.uuid4())
-            s.add(Story(id=sid, **{k: v for k, v in story_data.items() if k != "id"}))
+            valid_keys = {c.name for c in Story.__table__.columns}
+            filtered_data = {k: v for k, v in story_data.items() if k in valid_keys and k != "id"}
+            s.add(Story(id=sid, **filtered_data))
             return sid
 
     def record_story_view(self, story_id: str, viewer_id: str) -> bool:
@@ -456,7 +487,13 @@ class DatabaseMiddleware:
 
     def add_memory_event(self, event_data: dict) -> int:
         with self.session_scope() as s:
-            event = MemoryInteractionEvent(**event_data)
+            if "agent_user_id" in event_data:
+                event_data["actor_user_id"] = event_data.pop("agent_user_id")
+            
+            valid_keys = {c.name for c in MemoryInteractionEvent.__table__.columns}
+            filtered_data = {k: v for k, v in event_data.items() if k in valid_keys}
+            
+            event = MemoryInteractionEvent(**filtered_data)
             s.add(event)
             s.flush()
             return event.id
@@ -632,16 +669,295 @@ class DatabaseMiddleware:
                 return True
             return False
 
-    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float) -> bool:
+    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
         with self.session_scope() as s:
-            op = s.query(UserOpinion).filter_by(user_id=user_id, topic=topic).first()
+            op = s.query(UserOpinion).filter_by(user_id=user_id, topic=topic, round_id=round_id).first()
             if op:
                 op.opinion_score = opinion_score
             else:
-                s.add(UserOpinion(id=str(uuid.uuid4()), user_id=user_id, topic=topic, opinion_score=opinion_score))
+                s.add(UserOpinion(id=str(uuid.uuid4()), user_id=user_id, topic=topic, round_id=round_id, opinion_score=opinion_score))
             return True
 
     def get_user_opinions(self, user_id: str) -> dict:
+        from YPhotoSharing.YServer.classes.models import Round
         with self.session_scope() as s:
-            ops = s.query(UserOpinion).filter_by(user_id=user_id).all()
-            return {op.topic: op.opinion_score for op in ops}
+            ops = s.query(UserOpinion).join(Round, UserOpinion.round_id == Round.id).filter(UserOpinion.user_id == user_id).order_by(Round.day.desc(), Round.hour.desc()).all()
+            result = {}
+            for op in ops:
+                if op.topic not in result:
+                    result[op.topic] = op.opinion_score
+            return result
+
+    # --- Integration Methods for Coordination, Interest Modeling, Opinion Dynamics ---
+
+    def get_photo_topics(self, photo_id: str) -> list:
+        from YPhotoSharing.YServer.classes.models import PhotoTopic
+        with self.session_scope() as s:
+            topics = s.query(PhotoTopic).filter_by(photo_id=photo_id).all()
+            return [t.topic_id for t in topics]
+
+
+    def add_or_get_interest(self, topic: str) -> str:
+        with self.session_scope() as s:
+            interest = s.query(Interest).filter_by(interest=topic).first()
+            if interest:
+                return interest.iid
+            new_id = str(uuid.uuid4())
+            s.add(Interest(iid=new_id, interest=topic))
+            return new_id
+
+    def add_photo_topic(self, photo_id: str, topic_id: str) -> bool:
+        from YPhotoSharing.YServer.classes.models import PhotoTopic
+        with self.session_scope() as s:
+            pt = s.query(PhotoTopic).filter_by(photo_id=photo_id, topic_id=topic_id).first()
+            if pt:
+                return True
+            s.add(PhotoTopic(id=str(uuid.uuid4()), photo_id=photo_id, topic_id=topic_id))
+            return True
+
+    def compute_interest_counts_in_window(self, agent_id: str, window_rounds: list) -> dict:
+        return {}
+
+    def add_or_get_interests_batch(self, topics: list) -> dict:
+        res = {}
+        for t in topics:
+            res[t] = self.add_or_get_interest(t)
+        return res
+
+    def add_user_interests_batch(self, user_interests_data: list) -> int:
+        from YPhotoSharing.YServer.classes.models import UserInterest
+        with self.session_scope() as s:
+            count = 0
+            for d in user_interests_data:
+                ui = UserInterest(
+                    id=str(uuid.uuid4()),
+                    user_id=d["user_id"],
+                    interest_id=d["interest_id"],
+                    interest_score=d.get("interest_score", 0.5)
+                )
+                s.add(ui)
+                count += 1
+            return count
+
+    def get_latest_agent_opinion(self, agent_id: str, topic: str) -> Optional[float]:
+        with self.session_scope() as s:
+            op = s.query(UserOpinion).filter_by(user_id=agent_id, topic=topic).order_by(UserOpinion.round_id.desc()).first()
+            return op.opinion_score if op else None
+
+    def add_agent_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
+        return self.update_user_opinion(user_id, topic, opinion_score, round_id)
+
+    def update_user_archetype(self, user_id: str, archetype: str) -> bool:
+        with self.session_scope() as s:
+            user = s.query(User_mgmt).filter_by(id=user_id).first()
+            if user:
+                user.archetype = archetype
+                return True
+            return False
+
+    def get_all_users(self) -> list:
+        with self.session_scope() as s:
+            users = s.query(User_mgmt).all()
+            return [u.id for u in users]
+
+    def get_or_create_round(self, day: int, slot: int) -> str:
+        from YPhotoSharing.YServer.classes.models import Round
+        with self.session_scope() as s:
+            r = s.query(Round).filter_by(day=day, hour=slot).first()
+            if r: return r.id
+            new_id = str(uuid.uuid4())
+            s.add(Round(id=new_id, day=day, hour=slot))
+            return new_id
+
+    def get_topic_name_from_id(self, topic_id: str) -> Optional[str]:
+        with self.session_scope() as s:
+            topic = s.query(Interest).filter_by(iid=topic_id).first()
+            return topic.interest if topic else None
+
+    def _persist_photo_topics(self, session: Session, photo_id: str, photo_data: dict) -> None:
+        from YPhotoSharing.YServer.classes.models import PhotoTopic
+
+        topic_ids = []
+
+        raw_topic_ids = photo_data.get("topic_ids") or []
+        if isinstance(raw_topic_ids, str):
+            raw_topic_ids = [raw_topic_ids]
+        for topic_id in raw_topic_ids:
+            if topic_id:
+                topic_ids.append(str(topic_id))
+
+        raw_topics = photo_data.get("topics")
+        if raw_topics is None and photo_data.get("topic") is not None:
+            raw_topics = [photo_data.get("topic")]
+        if isinstance(raw_topics, str):
+            raw_topics = [raw_topics]
+
+        for topic in raw_topics or []:
+            if not topic:
+                continue
+            topic_str = str(topic)
+            if topic_str in topic_ids:
+                continue
+            existing_topic = session.query(Interest).filter_by(iid=topic_str).first()
+            if existing_topic:
+                topic_ids.append(existing_topic.iid)
+            else:
+                existing_named_topic = session.query(Interest).filter_by(interest=topic_str).first()
+                if existing_named_topic:
+                    topic_ids.append(existing_named_topic.iid)
+                else:
+                    new_topic_id = str(uuid.uuid4())
+                    session.add(Interest(iid=new_topic_id, interest=topic_str))
+                    topic_ids.append(new_topic_id)
+
+        for topic_id in topic_ids:
+            existing = (
+                session.query(PhotoTopic)
+                .filter_by(photo_id=photo_id, topic_id=topic_id)
+                .first()
+            )
+            if not existing:
+                session.add(PhotoTopic(id=str(uuid.uuid4()), photo_id=photo_id, topic_id=topic_id))
+
+    def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
+        from YPhotoSharing.YServer.classes.models import StressReward
+
+        try:
+            with self.session_scope() as s:
+                target_round = s.query(Round).filter_by(id=str(round_id)).first()
+                if target_round is None:
+                    return {"stress": 0.0, "reward": 0.0, "status": 404}
+
+                target_day = int(target_round.day or 0)
+                target_hour = int(target_round.hour or 0)
+                window_size = max(1, int(backward_rounds or 24) + 1)
+
+                def _before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour < hour))
+
+                def _at_or_before(day: int, hour: int):
+                    return or_(Round.day < day, and_(Round.day == day, Round.hour <= hour))
+
+                def _at_or_after(day: int, hour: int):
+                    return or_(Round.day > day, and_(Round.day == day, Round.hour >= hour))
+
+                window_rounds = (
+                    s.query(Round)
+                    .filter(_at_or_before(target_day, target_hour))
+                    .order_by(Round.day.desc(), Round.hour.desc())
+                    .limit(window_size)
+                    .all()
+                )
+                earliest_window_round = window_rounds[-1] if window_rounds else target_round
+                earliest_day = int(earliest_window_round.day or 0)
+                earliest_hour = int(earliest_window_round.hour or 0)
+
+                payload = {"stress": 0.0, "reward": 0.0, "status": 200}
+                for variable in ("stress", "reward"):
+                    latest_aggregate_row = (
+                        s.query(StressReward, Round)
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "aggregate",
+                            _before(target_day, target_hour),
+                        )
+                        .order_by(Round.day.desc(), Round.hour.desc())
+                        .first()
+                    )
+
+                    anchor_value = 0.0
+                    variation_lower_bound = _at_or_after(earliest_day, earliest_hour)
+                    if latest_aggregate_row is not None:
+                        latest_aggregate, aggregate_round = latest_aggregate_row
+                        anchor_value = float(latest_aggregate.value)
+                        variation_lower_bound = _at_or_after(
+                            int(aggregate_round.day or 0), int(aggregate_round.hour or 0)
+                        )
+
+                    variation_sum = (
+                        s.query(func.coalesce(func.sum(StressReward.value), 0.0))
+                        .join(Round, Round.id == StressReward.tid)
+                        .filter(
+                            StressReward.uid == str(agent_id),
+                            StressReward.variable == variable,
+                            StressReward.type == "variation",
+                            variation_lower_bound,
+                            _at_or_before(target_day, target_hour),
+                        )
+                        .scalar()
+                    )
+                    current_value = max(0.0, min(1.0, anchor_value + float(variation_sum or 0.0)))
+                    payload[variable] = current_value
+
+                    existing = (
+                        s.query(StressReward)
+                        .filter_by(
+                            uid=str(agent_id),
+                            variable=variable,
+                            type="aggregate",
+                            tid=str(round_id),
+                        )
+                        .first()
+                    )
+                    if existing is None:
+                        s.add(
+                            StressReward(
+                                id=str(uuid.uuid4()),
+                                uid=str(agent_id),
+                                variable=variable,
+                                value=current_value,
+                                type="aggregate",
+                                action=None,
+                                tid=str(round_id),
+                            )
+                        )
+                    else:
+                        existing.value = current_value
+
+                return payload
+        except Exception:
+            logger.exception("Error getting stress/reward for agent %s", agent_id)
+            return {"stress": 0.0, "reward": 0.0, "status": 500}
+
+    def set_stress_reward_variations(
+        self, user_id: str, round_id: str, variations: list, action_name: Optional[str] = None
+    ) -> int:
+        from YPhotoSharing.YServer.classes.models import StressReward
+
+        written = 0
+        try:
+            with self.session_scope() as s:
+                for variation in variations or []:
+                    variable = str((variation or {}).get("variable") or "").strip().lower()
+                    if variable not in {"stress", "reward"}:
+                        continue
+                    try:
+                        value = float((variation or {}).get("value"))
+                    except (TypeError, ValueError):
+                        continue
+                    if value < -1.0 or value > 1.0:
+                        continue
+                    s.add(
+                        StressReward(
+                            id=str(uuid.uuid4()),
+                            uid=str(user_id),
+                            variable=variable,
+                            value=value,
+                            type="variation",
+                            action=action_name,
+                            tid=str(round_id),
+                        )
+                    )
+                    written += 1
+            return written
+        except Exception:
+            logger.exception("Error storing stress/reward variations for agent %s", user_id)
+            return written
+
+    def consolidate_redis_to_sqlite(self, day: int) -> dict:
+        return {"status": "mocked"}
+
+    def cleanup_old_posts_from_redis(self, day: int, slot: int) -> dict:
+        return {"status": "mocked"}
