@@ -188,11 +188,45 @@ The top level should contain an `agents` array, and may also include a
     {
       "id": "user-0001",
       "username": "travel_guru",
+      "email": "travel_guru@example.com",
+      "password": "hashed_pw",
+      "user_type": "llm",
+      "age": 28,
+      "gender": "female",
+      "nationality": "US",
+      "education_level": "college",
+      "profession": "traveler",
+      "leaning": "neutral",
+      "oe": "high",
+      "co": "medium",
+      "ex": "high",
+      "ag": "medium",
+      "ne": "low",
+      "language": "en",
+      "activity_profile": "medium",
+      "archetype": "explorer",
       "recsys_type": "0",
+      "frecsys_type": "default",
+      "interests": ["travel", "food"],
+      "opinions": {
+        "travel": 0.7,
+        "food": 0.6
+      },
+      "stubborn_topics": [],
+      "custom_features": {
+        "aesthetic": "warm travel diary"
+      },
+      "daily_activity_level": 2,
+      "round_actions": 4,
+      "is_page": 0,
+      "is_private": false,
+      "is_verified": false,
       "attention_budget": 100,
       "photo_sharing": {
         "cover_image": "travel_cover.jpg",
-        "story_visibility": "followers"
+        "favorite_filters": ["warm", "vintage"],
+        "story_visibility": "followers",
+        "creator_tier": "standard"
       }
     }
   ],
@@ -206,5 +240,6 @@ The top level should contain an `agents` array, and may also include a
 - **`photo_sharing`**: Optional nested block for photo-platform-only fields such as `cover_image`, `story_visibility`, `favorite_filters`, or `creator_tier`.
 - **Prompt personas**: the client builds LLM personas from the full agent record, including age, gender, nationality, education, profession, personality traits, interests, bio, account status, and any `custom_features` you provide. `photo_sharing` metadata is also surfaced when present.
 - **`user_type`**: Set to `llm` for prompt-driven agents or `rule_based` for deterministic agents. The loader maps this to the internal `llm` flag.
+- **`recsys_type`**: The platform's coarse persona cluster. YPhotoSharing does not require a separate `cluster` field in `agents.json`; the recsys type already serves that role for prompts and recommendation bias.
 - **`attention_budget`**: Controls how many actions the agent can perform per slot. Higher numbers yield more hyperactive agents.
 - **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.

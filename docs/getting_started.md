@@ -33,8 +33,12 @@ Navigate to the `example/` directory. You will find:
 - `server_config.json`: Server port and logic flags.
 - `client_config.json`: Agent population settings, rounds, and LLM backend choice.
 - `agents.json`: The YSimulator-style agent population document for the client.
+  It should contain an `agents` array plus an optional `generation_config`.
   Photo-sharing-specific fields can be attached directly or inside a
-  `photo_sharing` block and will be preserved by the loader.
+  `photo_sharing` block and will be preserved by the loader. The current
+  example mirrors the implemented runtime fields, including `attention_budget`,
+  `is_private`, `is_verified`, `recsys_type`, `custom_features`, and
+  `photo_sharing.creator_tier`.
 
 ### 2. Start the Orchestrator Server
 Open a terminal and start the server. This automatically starts a local Ray cluster.
@@ -59,6 +63,8 @@ As the simulation progresses, you will see output logging the agent actions. At 
 If you are running the aligned Ray actors, also inspect:
 
 - `example/logs/<client_id>_execution.log`
-- `example/logs/<server_name>.log`
+- `example/logs/<server_name>_server.log`
+- `example/logs/<client_id>_actor.log`
+- `example/logs/<server_name>_actor.log`
 
 Those files capture the runtime events emitted from inside the actors rather than just launcher output, and they use the same structured JSON layout as YSimulator.
