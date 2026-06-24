@@ -14,6 +14,7 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     persist_stress_reward_variations,
     resolve_photo_topic_ids,
 )
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_reaction
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +48,22 @@ async def react_to_photo(
     """
     caption = photo.get("caption", "")
     photo_id = photo.get("id", "")
+    cluster_id = int((agent_attrs or {}).get("recsys_type") or 0)
+    is_llm_agent = bool((agent_attrs or {}).get("llm", True))
 
-    try:
-        reaction = await llm_service.decide_reaction.remote(caption=caption)
-    except Exception as exc:
-        logger.warning(f"Reaction decision failed for user {user_id}: {exc}")
-        reaction = "IGNORE"
+    if is_llm_agent:
+        try:
+            reaction = await llm_service.decide_reaction.remote(caption=caption)
+        except Exception as exc:
+            logger.warning(f"Reaction decision failed for user {user_id}: {exc}")
+            reaction = "IGNORE"
+    else:
+        reaction = generate_rule_based_reaction(
+            caption=caption,
+            username=(agent_attrs or {}).get("username", user_id),
+            interests=(agent_attrs or {}).get("interests", []),
+            cluster_id=cluster_id,
+        )
 
     if reaction == "IGNORE":
         logger.debug(f"User {user_id} ignored photo {photo_id}")

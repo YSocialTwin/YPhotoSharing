@@ -17,6 +17,7 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     record_memory_event,
     resolve_photo_topic_ids,
 )
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_comment
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ async def post_comment(
 
     if agent_attrs is None:
         agent_attrs = {}
+    is_llm_agent = bool(agent_attrs.get("llm", True))
 
     try:
         following_ids = await server.get_following.remote(user_id)
@@ -88,17 +90,25 @@ async def post_comment(
         except Exception as e:
             logger.warning(f"Could not retrieve memories for comment: {e}")
 
-    try:
-        body = await llm_service.generate_comment.remote(
+    if is_llm_agent:
+        try:
+            body = await llm_service.generate_comment.remote(
+                caption=caption,
+                author=author,
+                cluster_id=cluster_id,
+                agent_attrs=agent_attrs,
+                image_url=image_url,
+            )
+        except Exception as exc:
+            logger.warning(f"Comment generation failed for user {user_id}: {exc}")
+            return None
+    else:
+        body = generate_rule_based_comment(
             caption=caption,
             author=author,
+            username=agent_attrs.get("username", user_id),
             cluster_id=cluster_id,
-            agent_attrs=agent_attrs,
-            image_url=image_url,
         )
-    except Exception as exc:
-        logger.warning(f"Comment generation failed for user {user_id}: {exc}")
-        return None
 
     if not body or not body.strip():
         return None

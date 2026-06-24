@@ -2,11 +2,14 @@
 Follow action for YPhotoSharing agents.
 
 Agents call follow_user() to follow or unfollow another user.
-The LLM decides whether to follow; the server records the relationship.
+LLM agents decide whether to follow, while rule-based agents use a
+deterministic heuristic; the server records the relationship.
 """
 
 import logging
 from typing import Optional
+
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_follow_decision
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ async def follow_user(
     target_user: dict,
     round_id: str,
     cluster_id: int = 0,
+    agent_attrs: Optional[dict] = None,
 ) -> Optional[str]:
     """
     Decide whether to follow *target_user* and persist if positive.
@@ -37,17 +41,26 @@ async def follow_user(
     username = target_user.get("username", "user")
     bio = target_user.get("bio", "")
     topics = target_user.get("topics", "")
+    is_llm_agent = bool((agent_attrs or {}).get("llm", True))
 
-    try:
-        decision = await llm_service.decide_follow.remote(
+    if is_llm_agent:
+        try:
+            decision = await llm_service.decide_follow.remote(
+                username=username,
+                bio=bio,
+                topics=topics,
+                cluster_id=cluster_id,
+            )
+        except Exception as exc:
+            logger.warning(f"Follow decision failed for user {follower_id}: {exc}")
+            decision = "SKIP"
+    else:
+        decision = generate_rule_based_follow_decision(
             username=username,
             bio=bio,
             topics=topics,
             cluster_id=cluster_id,
         )
-    except Exception as exc:
-        logger.warning(f"Follow decision failed for user {follower_id}: {exc}")
-        decision = "SKIP"
 
     if decision == "FOLLOW":
         try:

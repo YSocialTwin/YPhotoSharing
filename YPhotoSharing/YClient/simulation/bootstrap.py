@@ -98,6 +98,14 @@ def normalize_agent_config(user_config: dict, simulation_config: Optional[dict])
     enriched.setdefault("stubborn_topics", [])
     enriched.setdefault("custom_features", {})
 
+    user_type = str(enriched.get("user_type", "")).strip().lower()
+    if user_type in {"llm", "rule_based", "rule-based", "rule"}:
+        enriched["llm"] = user_type == "llm"
+    elif "llm" in enriched:
+        enriched["llm"] = bool(enriched["llm"])
+    else:
+        enriched["llm"] = True
+
     agents_cfg = simulation_config.get("agents", {})
     enriched["probability_of_secondary_follow"] = agents_cfg.get(
         "probability_of_secondary_follow", 0.1

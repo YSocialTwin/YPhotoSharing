@@ -6,6 +6,8 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_story
+
 logger = logging.getLogger(__name__)
 
 async def post_story(
@@ -23,13 +25,20 @@ async def post_story(
     Generate a short ephemeral story with the LLM and persist via the server.
     """
     try:
-        content = await llm_service.generate_caption.remote(
-            topic=topic,
-            day=day,
-            slot=slot,
-            cluster_id=cluster_id,
-            agent_attrs=agent_attrs,
-        )
+        if agent_attrs and not agent_attrs.get("llm", True):
+            content = generate_rule_based_story(
+                topic=topic,
+                username=agent_attrs.get("username", user_id),
+                cluster_id=cluster_id,
+            )
+        else:
+            content = await llm_service.generate_caption.remote(
+                topic=topic,
+                day=day,
+                slot=slot,
+                cluster_id=cluster_id,
+                agent_attrs=agent_attrs,
+            )
     except Exception as exc:
         logger.warning(f"Story generation failed for user {user_id}: {exc}")
         content = f"Feeling {topic} today! #story"

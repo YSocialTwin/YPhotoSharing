@@ -244,6 +244,9 @@ class SimulationClient:
         logger.info(f"Client {self.client_id}: loaded {len(self._agents)} agents")
         return len(self._agents)
 
+    def _is_llm_agent(self, user_data: dict) -> bool:
+        return bool(user_data.get("llm", True))
+
     # ------------------------------------------------------------------
     # Simulation loop
     # ------------------------------------------------------------------

@@ -10,6 +10,7 @@ import uuid
 from typing import Any, Dict, Optional
 
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_caption
 
 logger = logging.getLogger(__name__)
 async def post_photo(
@@ -49,6 +50,7 @@ async def post_photo(
     """
     if agent_attrs is None:
         agent_attrs = {}
+    is_llm_agent = bool(agent_attrs.get("llm", True))
 
     # Fetch usernames of followers to allow mentions
     try:
@@ -66,17 +68,20 @@ async def post_photo(
     except Exception as e:
         logger.warning(f"Could not fetch following usernames for mentions: {e}")
 
-    try:
-        caption = await llm_service.generate_caption.remote(
-            topic=topic,
-            day=day,
-            slot=slot,
-            cluster_id=cluster_id,
-            agent_attrs=agent_attrs,
-        )
-    except Exception as exc:
-        logger.warning(f"Caption generation failed for user {user_id}: {exc}")
-        caption = f"#{topic}"
+    if is_llm_agent:
+        try:
+            caption = await llm_service.generate_caption.remote(
+                topic=topic,
+                day=day,
+                slot=slot,
+                cluster_id=cluster_id,
+                agent_attrs=agent_attrs,
+            )
+        except Exception as exc:
+            logger.warning(f"Caption generation failed for user {user_id}: {exc}")
+            caption = f"#{topic}"
+    else:
+        caption = generate_rule_based_caption(topic, agent_attrs.get("username", user_id), cluster_id)
 
     # Generate media url using Phase 7 Image Generation Service
     try:

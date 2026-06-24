@@ -1,6 +1,10 @@
 import logging
 import random
 
+from YPhotoSharing.YClient.actions.rule_based_actions import (
+    generate_rule_based_follow_request_decision,
+)
+
 logger = logging.getLogger(__name__)
 
 async def review_follow_requests(
@@ -8,12 +12,14 @@ async def review_follow_requests(
     llm_service,
     user_id: str,
     round_id: str,
-    cluster_id: int = 0
+    cluster_id: int = 0,
+    agent_attrs: dict = None,
 ) -> bool:
     """
     Checks pending follow requests and uses the LLM to accept or reject them based on profile.
     """
     try:
+        is_llm_agent = bool((agent_attrs or {}).get("llm", True))
         pending = await server.get_pending_follow_requests.remote(user_id)
         if not pending:
             return True
@@ -24,7 +30,7 @@ async def review_follow_requests(
             requester = ray.get(server.get_user.remote(req["follower_id"]))
             if not requester:
                 action = "rejected"
-            else:
+            elif is_llm_agent:
                 action = await llm_service.decide_follow_request.remote(
                     username=requester.get("username", "Unknown"),
                     bio=requester.get("bio", ""),
@@ -33,6 +39,13 @@ async def review_follow_requests(
                 action = action.lower()
                 if action not in ["accepted", "rejected"]:
                     action = "accepted"  # default fallback
+            else:
+                decision = generate_rule_based_follow_request_decision(
+                    username=requester.get("username", "Unknown"),
+                    bio=requester.get("bio", ""),
+                    cluster_id=cluster_id,
+                )
+                action = "accepted" if decision == "ACCEPT" else "rejected"
                     
             await server.review_follow_request.remote(req["follower_id"], user_id, action, round_id)
             logger.debug(f"User {user_id} {action} follow request from {req['follower_id']}")

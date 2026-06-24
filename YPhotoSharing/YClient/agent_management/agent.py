@@ -91,7 +91,8 @@ class Agent:
                 self.llm_service,
                 self.user_id,
                 round_id,
-                self.cluster_id
+                self.cluster_id,
+                agent_attrs=self.user_data,
             )
 
         results = []
@@ -482,6 +483,7 @@ class Agent:
             day=day,
             slot=hour,
             cluster_id=self.cluster_id,
+            agent_attrs=self.user_data,
             opinion_manager=self.opinion_manager,
             stress_reward_system=self.stress_reward_system,
             stress_reward_enabled=self.stress_reward_enabled,
@@ -539,7 +541,8 @@ class Agent:
             photo_id=photo_id,
             day=day,
             slot=hour,
-            cluster_id=self.cluster_id
+            cluster_id=self.cluster_id,
+            agent_attrs=self.user_data,
         )
         if success:
             self.action_logger.info(

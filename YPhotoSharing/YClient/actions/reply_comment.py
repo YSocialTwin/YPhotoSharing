@@ -6,6 +6,7 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     persist_stress_reward_variations,
     resolve_photo_topic_ids,
 )
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_reply
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ async def reply_comment(
     day: int,
     slot: int,
     cluster_id: int,
+    agent_attrs: dict = None,
     opinion_manager=None,
     stress_reward_system=None,
     stress_reward_enabled: bool = False,
@@ -28,12 +30,21 @@ async def reply_comment(
     Generate a reply to a specific comment via the LLM and post it.
     """
     try:
-        reply_body = await llm_service.generate_comment.remote(
-            caption="Replying to comment thread",
-            author="another_user",
-            cluster_id=cluster_id,
-            agent_attrs=None
-        )
+        is_llm_agent = bool((agent_attrs or {}).get("llm", True))
+        if is_llm_agent and llm_service and hasattr(llm_service, "generate_comment"):
+            reply_body = await llm_service.generate_comment.remote(
+                caption="Replying to comment thread",
+                author="another_user",
+                cluster_id=cluster_id,
+                agent_attrs=None
+            )
+        else:
+            reply_body = generate_rule_based_reply(
+                caption="Replying to comment thread",
+                author="another_user",
+                username=(agent_attrs or {}).get("username", str(user_id)),
+                cluster_id=cluster_id,
+            )
 
         photo = await server.get_photo.remote(photo_id)
         if not photo:

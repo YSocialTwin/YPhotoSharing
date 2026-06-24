@@ -4,6 +4,7 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     build_memory_context,
     record_memory_event,
 )
+from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_comment
 
 logger = logging.getLogger(__name__)
 
@@ -15,13 +16,14 @@ async def send_dm(
     photo_id: str = None,
     day: int = 0,
     slot: int = 0,
-    cluster_id: int = 0
+    cluster_id: int = 0,
+    agent_attrs: dict = None,
 ) -> bool:
     """
     Generate and send a direct message to a user, optionally attaching a photo.
     """
     try:
-        agent_attrs = {}
+        agent_attrs = dict(agent_attrs or {})
         try:
             memory_context = await build_memory_context(
                 server,
@@ -35,12 +37,20 @@ async def send_dm(
         except Exception as e:
             logger.warning(f"Could not retrieve memories for DM: {e}")
 
-        content = await llm_service.generate_comment.remote(
-            caption="Sending a direct message.",
-            author="another_user",
-            cluster_id=cluster_id,
-            agent_attrs=agent_attrs
-        )
+        if agent_attrs.get("llm", True):
+            content = await llm_service.generate_comment.remote(
+                caption="Sending a direct message.",
+                author="another_user",
+                cluster_id=cluster_id,
+                agent_attrs=agent_attrs
+            )
+        else:
+            content = generate_rule_based_comment(
+                caption="Sending a direct message.",
+                author="another_user",
+                username=sender_id,
+                cluster_id=cluster_id,
+            )
         
         await server.send_dm.remote(sender_id, recipient_id, content, photo_id)
         
