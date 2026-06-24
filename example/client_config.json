@@ -9,7 +9,9 @@
     "start_day": 0,
     "use_local_diffusion": true,
     "local_diffusion_model": "segmind/tiny-sd",
+    "enable_emotion_annotation": true,
     "enable_sentiment": true,
+    "enable_memory_annotations": true,
     "discussion_topics": [
       "travel", "food", "fitness", "art", "nature", "fashion", "technology"
     ],

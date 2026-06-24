@@ -10,6 +10,7 @@ The current implementation has been aligned with the engineering patterns used b
 - actor logs are written to `logs/<client_id>_execution.log` and `logs/<server_name>.log`
 - stress/reward is configured and persisted through the dedicated server table
 - client-side round orchestration is split from scheduling helpers
+- annotation toggles are documented for emotion, sentiment, and memory
 
 ---
 
@@ -142,3 +143,4 @@ mkdocs serve
 Then navigate to `http://127.0.0.1:8000` in your browser.
 
 For the alignment analysis and the phased implementation plan, see [`docs/ysimulator_alignment.md`](docs/ysimulator_alignment.md).
+For annotation configuration details, see [`docs/annotations.md`](docs/annotations.md).

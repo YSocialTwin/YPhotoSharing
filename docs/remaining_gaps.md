@@ -9,11 +9,17 @@ that are already aligned.
 - Core observability is aligned enough for day-to-day debugging.
 - Photo-topic persistence, opinion paths, and stress/reward persistence are in
   place.
-- The main remaining gap is architectural depth, not basic correctness.
+- Server decomposition, client bootstrap cleanup, and shared interaction
+  helpers are now partially decomposed.
+- Annotation toggles for emotion, sentiment, and memory are documented and
+  configurable.
+- The main remaining gap is platform-specific depth, not basic correctness.
 - YPhotoSharing must remain photo-first; some YSimulator concepts should stay
   absent or only be adapted conceptually.
 
 ## Priority 0: Server Decomposition
+
+Status: in progress, with a first repository layer now in place.
 
 Why it matters:
 - This is the largest structural difference from YSimulator.
@@ -38,6 +44,8 @@ Validation:
 
 ## Priority 1: Client Orchestration Cleanup
 
+Status: in progress, with user bootstrap logic extracted from the actor.
+
 Why it matters:
 - The client is already better structured, but the coordination layer is still
   heavier than YSimulator’s.
@@ -59,6 +67,9 @@ Validation:
 - Round scheduling should be testable without running the full simulation.
 
 ## Priority 2: Cross-Cutting Domain Helpers
+
+Status: implemented for topic recovery, memory annotation, opinion path
+recording, and stress/reward persistence.
 
 Why it matters:
 - Opinion and stress/reward logic are now correct, but some of the supporting
@@ -82,6 +93,8 @@ Validation:
 
 ## Priority 3: Optional YSimulator-Style Secondary Structuring
 
+Status: deferred until a concrete duplication hotspot appears.
+
 Why it matters:
 - YSimulator is more deeply modular, but YPhotoSharing does not need a literal
   copy of every submodule.
@@ -99,6 +112,8 @@ Validation:
 - Any new package should have a clear responsibility and a test reason.
 
 ## Priority 4: Platform-Specific Depth
+
+Status: still open.
 
 Why it matters:
 - This is not parity work in the narrow sense, but it is the place where
@@ -130,6 +145,7 @@ regression appears:
 - stress/reward persistence and aggregation
 - photo-topic persistence
 - phase-level regression tests
+- annotation toggles for emotion, sentiment, and memory
 
 ## Working Order
 
