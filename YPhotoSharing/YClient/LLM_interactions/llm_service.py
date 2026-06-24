@@ -225,10 +225,10 @@ class LLMService:
         else:
             return 0.0
 
-    def infer_article_opinion(self, article_text: str, topic: str, opinion_options: List[str]) -> str:
-        """Infer the stance of a text on a topic based on available opinion options."""
+    def infer_photo_opinion(self, photo_caption: str, topic: str, opinion_options: List[str], agent_id: str = "") -> str:
+        """Infer the stance of a photo on a topic based on available opinion options."""
         options_str = ", ".join(opinion_options)
-        result = self._render("infer_article_opinion", article_text=article_text, topic=topic, opinion_options=options_str).strip()
+        result = self._render("infer_article_opinion", article_text=photo_caption, topic=topic, opinion_options=options_str).strip()
         for opt in opinion_options:
             if opt.lower() in result.lower():
                 return opt

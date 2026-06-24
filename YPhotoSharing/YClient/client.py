@@ -10,11 +10,14 @@ import asyncio
 import logging
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import ray
 
+from YPhotoSharing.common_utils import setup_logging
 from YPhotoSharing.YClient.agent_management.agent import Agent
+from YPhotoSharing.YClient.simulation.round_planner import SimulationRoundPlanner
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,7 @@ class SimulationClient:
         client_id: str,
         server_name: str,
         namespace: str,
+        config_path: str,
         llm_config: Optional[Dict[str, Any]] = None,
         prompts_config: Optional[Dict[str, Any]] = None,
         llm_v_config: Optional[Dict[str, Any]] = None,
@@ -73,10 +77,17 @@ class SimulationClient:
         simulation_config: Optional[Dict[str, Any]] = None,
     ):
         self.client_id = client_id
+        self.config_path = Path(config_path)
         self.simulation_config = simulation_config or {}
         self._agents: List[Agent] = []
         self._round_count = 0
         self._start_time = time.time()
+        self.round_planner = SimulationRoundPlanner(self.simulation_config)
+
+        global logger
+        enable_console = (logging_config or {}).get("enable_console_log", True)
+        logger = setup_logging(self.config_path, "client", enable_console)
+        self.logger = logger
 
         # Connect to server
         for i in range(10):
@@ -95,12 +106,29 @@ class SimulationClient:
             llm_config, prompts_config, llm_v_config, logging_config or {}
         )
 
+        from YPhotoSharing.YClient.stress_reward import StressRewardSystem, build_stress_reward_settings_from_config
+        stress_reward_settings = build_stress_reward_settings_from_config(self.simulation_config)
+        self.stress_reward_enabled = bool(stress_reward_settings.get("enabled", False))
+        self.stress_reward_backward_rounds = int(stress_reward_settings.get("backward_rounds", 24) or 24)
+        self.stress_reward_system = StressRewardSystem(stress_reward_settings.get("system") or {})
+
         from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
         use_local_diffusion = self.simulation_config.get("use_local_diffusion", False)
         local_diffusion_model = self.simulation_config.get("local_diffusion_model", "segmind/tiny-sd")
         self.image_gen_service = ImageGenerationService(
             use_local_diffusion=use_local_diffusion,
             local_diffusion_model=local_diffusion_model
+        )
+
+        # Instantiate OpinionManager
+        from YPhotoSharing.YClient.opinion.opinion_manager import OpinionManager
+        self.opinion_manager = OpinionManager(
+            simulation_config=self.simulation_config,
+            server=self.server,
+            llm_manager=self.llm_service,
+            agent_profiles=self._agents,
+            client_id=self.client_id,
+            logger=logger,
         )
 
         # Register with server
@@ -129,6 +157,8 @@ class SimulationClient:
         """Register agents from user config dicts. Returns number loaded."""
         self._agents = []
         import random
+        # Stage 6: Initialize Opinions (create a baseline round once)
+        init_round_id = await self.server.get_or_create_round.remote(-1, -1)
         for u in user_configs:
             # Phase 8: Randomly assign 20% to be private accounts
             if "is_private" not in u:
@@ -169,7 +199,7 @@ class SimulationClient:
                     for topic in topics:
                         group = random.choice(list(groups.values()))
                         val = random.uniform(group[0], group[1])
-                        await self.server.update_user_opinion.remote(u["id"], topic, val)
+                        await self.server.update_user_opinion.remote(u["id"], topic, val, init_round_id)
                         
                 # Stage 9: Interest Configuration and Dynamics
                 topics = self.simulation_config.get("discussion_topics", ["general"])
@@ -193,48 +223,24 @@ class SimulationClient:
                     num_interests = random.randint(1, min(3, max(1, len(topic_ids))))
                     user_interest_ids = random.sample(topic_ids, num_interests) if topic_ids else []
                 
-                # Use a dummy round_id "init" for initial interests
-                await self.server.set_user_interests.remote(u["id"], user_interest_ids, "init")
+                # Use the valid init_round_id for initial interests
+                await self.server.set_user_interests.remote(u["id"], user_interest_ids, init_round_id)
                 
             except Exception as e:
                 logger.warning(f"Could not register user {u.get('id')} or opinions: {e}")
-            # YSimulator Stage 3: Calculate dynamic action_weights
-            base_weights = self.simulation_config.get("actions_likelihood", {
-                "post_photo": 0.15,
-                "react": 0.20,
-                "comment": 0.15,
-                "follow": 0.10,
-                "share": 0.05,
-                "report": 0.05,
-                "save": 0.10,
-                "reply_comment": 0.10,
-                "unfollow": 0.05,
-                "send_dm": 0.05,
-                "post_story": 0.05,
-                "watch_story": 0.05
-            })
-            weights = base_weights.copy()
-            if "post" in weights: weights["post_photo"] = weights.pop("post")
-            if "read" in weights: weights["react"] = weights.pop("read")
-            
-            archetype = u.get("archetype")
-            if archetype == "broadcaster":
-                weights["post_photo"] = weights.get("post_photo", 0) * 2.0
-                weights["post_story"] = weights.get("post_story", 0) * 2.0
-            elif archetype == "explorer":
-                weights["watch_story"] = weights.get("watch_story", 0) * 2.0
-                weights["react"] = weights.get("react", 0) * 2.0
-            elif archetype == "validator":
-                weights["comment"] = weights.get("comment", 0) * 2.0
-                weights["react"] = weights.get("react", 0) * 1.5
+            weights = self.round_planner.build_action_weights(u)
 
             self._agents.append(Agent(
                 user_data=u, 
                 server=self.server, 
-                llm_service=self.llm_service,
-                image_gen_service=self.image_gen_service,
-                action_weights=weights
-            ))
+            llm_service=self.llm_service,
+            image_gen_service=self.image_gen_service,
+            action_weights=weights,
+            opinion_manager=self.opinion_manager,
+            stress_reward_system=self.stress_reward_system,
+            stress_reward_enabled=self.stress_reward_enabled,
+            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
+        ))
         logger.info(f"Client {self.client_id}: loaded {len(self._agents)} agents")
         return len(self._agents)
 
@@ -269,28 +275,7 @@ class SimulationClient:
     async def _run_agents_async(self, day: int, hour: int,
                                  round_id: str) -> List[list]:
         import random
-        profiles = self.simulation_config.get("activity_profiles", {})
-        hourly_activity = self.simulation_config.get("hourly_activity", {})
-        
-        active_agents = []
-        for agent in self._agents:
-            u_profile = agent.user_data.get("activity_profile")
-            
-            # Check profile
-            if u_profile and u_profile in profiles:
-                try:
-                    active_hours = [int(h) for h in profiles[u_profile].split(",")]
-                    if hour in active_hours:
-                        active_agents.append(agent)
-                except ValueError:
-                    # Fallback on parse error
-                    pass
-                continue
-            
-            # If no profile or unknown, use hourly_activity
-            prob = hourly_activity.get(str(hour), 0.04)
-            if random.random() < float(prob):
-                active_agents.append(agent)
+        active_agents = self.round_planner.select_active_agents(self._agents, hour)
 
         tasks = [agent.run_round(day, hour, round_id) for agent in active_agents]
         return await asyncio.gather(*tasks, return_exceptions=False)
