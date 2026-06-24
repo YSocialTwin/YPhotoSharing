@@ -29,7 +29,7 @@ def test_round_planner_builds_archetype_sensitive_weights():
     assert explorer_weights["react"] == 0.6
 
 
-def test_round_planner_selects_active_agents_by_profile_and_hour():
+def test_round_planner_selects_active_agents_by_profile_and_hour(monkeypatch):
     planner = SimulationRoundPlanner(
         {
             "activity_profiles": {"day": [8, 9], "evening": "18,19"},
@@ -43,12 +43,14 @@ def test_round_planner_selects_active_agents_by_profile_and_hour():
         FakeAgent(None),
     ]
 
+    monkeypatch.setattr("random.random", lambda: 1.0)
     assert [agent.user_data["activity_profile"] for agent in planner.select_active_agents(agents, 8)] == [
         "day"
     ]
     assert [agent.user_data["activity_profile"] for agent in planner.select_active_agents(agents, 18)] == [
         "evening"
     ]
+    monkeypatch.setattr("random.random", lambda: 0.0)
     assert [agent.user_data["activity_profile"] for agent in planner.select_active_agents(agents, 10)] == [
         None,
     ]
