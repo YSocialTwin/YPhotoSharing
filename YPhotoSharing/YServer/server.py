@@ -69,8 +69,12 @@ class OrchestratorServer:
         self._start_time = time.time()
 
         global logger
-        enable_console = self.simulation_config.get("logging", {}).get("enable_console_log", True)
-        logger = setup_logging(Path(config_path), "server", enable_console)
+        logger = setup_logging(
+            Path(config_path),
+            "server",
+            self.simulation_config.get("logging", {}),
+            instance_name=self.server_name,
+        )
         self.logger = logger
 
         # Database – server-exclusive
@@ -407,15 +411,71 @@ class OrchestratorServer:
     def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
         return self._db.update_comment_sentiment(comment_id, sentiment_score)
 
-    def update_user_opinion(self, user_id: str, topic: str, opinion_score: float, round_id: str) -> bool:
-        return self._db.update_user_opinion(user_id, topic, opinion_score, round_id)
+    def update_user_opinion(
+        self,
+        user_id: str,
+        topic: str,
+        opinion_score: float,
+        round_id: str,
+        topic_id: str = None,
+        opinion_label: str = None,
+        model_name: str = None,
+    ) -> bool:
+        return self._db.update_user_opinion(
+            user_id,
+            topic,
+            opinion_score,
+            round_id,
+            topic_id=topic_id,
+            opinion_label=opinion_label,
+            model_name=model_name,
+        )
 
     def get_user_opinions(self, user_id: str) -> dict:
         return self._db.get_user_opinions(user_id)
 
+    def get_opinion_paths(self, user_id: str, topic: str = None, limit: int = 100) -> List[dict]:
+        return self._db.get_opinion_paths(user_id, topic=topic, limit=limit)
+
     def get_latest_agent_opinion(self, agent_id: str, topic_id: str, client_id: str = None) -> Optional[float]:
         topic_name = self.get_topic_name_from_id(topic_id, client_id=client_id) or topic_id
         return self._db.get_latest_agent_opinion(agent_id, topic_name)
+
+    def record_opinion_path(
+        self,
+        user_id: str,
+        topic: str,
+        round_id: str,
+        model_name: str,
+        source_score: float,
+        source_label: str,
+        target_score: float,
+        target_label: str,
+        transition: str,
+        direction: str = None,
+        evaluation_scope: str = None,
+        topic_id: str = None,
+        parent_post_id: str = None,
+        actor_user_id: str = None,
+        payload_json: str = None,
+    ) -> str:
+        return self._db.record_opinion_path(
+            user_id=user_id,
+            topic=topic,
+            round_id=round_id,
+            model_name=model_name,
+            source_score=source_score,
+            source_label=source_label,
+            target_score=target_score,
+            target_label=target_label,
+            transition=transition,
+            direction=direction,
+            evaluation_scope=evaluation_scope,
+            topic_id=topic_id,
+            parent_post_id=parent_post_id,
+            actor_user_id=actor_user_id,
+            payload_json=payload_json,
+        )
 
     def get_stress_reward(self, agent_id: str, round_id: str, backward_rounds: int = 24) -> dict:
         return self._db.get_stress_reward(agent_id, round_id, backward_rounds)

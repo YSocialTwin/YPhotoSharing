@@ -43,15 +43,18 @@ def main():
         config = json.load(f)
         
     global logger
-    enable_console = config.get("logging", {}).get("enable_console_log", True)
-    logger = setup_logging(config_dir, "client", enable_console)
-
     # Ray connection – read address written by server
     ray_config_file = config_dir / "ray_config.temp"
     namespace_file = config_dir / "ray_namespace.temp"
     namespace = config.get("namespace", "yphotosharing")
     if namespace_file.exists():
         namespace = namespace_file.read_text().strip()
+
+    client_id = config.get("client_id") or str(uuid.uuid4())
+    logging_config = dict(config.get("logging", {}) or {})
+    logging_config.setdefault("log_dir", str(config_dir / "logs"))
+    logging_config.setdefault("instance_name", client_id)
+    logger = setup_logging(config_dir, "client", logging_config, instance_name=client_id)
 
     address = config.get("address", "auto")
     if ray_config_file.exists() and address == "auto":
@@ -60,7 +63,6 @@ def main():
     ray.init(address=address, namespace=namespace, include_dashboard=False)
     print(f"--- 🔗 Connected to Ray cluster ---")
 
-    client_id = config.get("client_id") or str(uuid.uuid4())
     server_name = config.get("server_name", "Orchestrator")
 
     llm_config = config.get("llm", {})

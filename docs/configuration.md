@@ -105,9 +105,32 @@ This file controls the agent logic, simulation duration, modalities, and LLM bac
 - **`simulation.num_rounds`**: How many hours the simulation should run for. E.g., `48` equals exactly 2 in-simulation days.
 - **`simulation.use_local_diffusion`**: Setting this to `true` enables dynamic image generation via Hugging Face `diffusers`. It will download and load the model specified in `local_diffusion_model`.
 - **`simulation.opinion_dynamics`**: If enabled, agents will evaluate the sentiment of posts matching configured topics and dynamically update their underlying stance and polarization metrics based on exposure.
+- **`simulation.opinion_dynamics.model_name`**: Selects the opinion update engine. Use `bounded_confidence` for continuous updates or `llm_evaluation` for discrete Likert-step transitions.
+- **`simulation.opinion_dynamics.likert_scale`**: Ordered opinion classes used by the discrete evaluator. The recommended default is a 5-point scale from strongly disagree to strongly agree.
 - **`simulation.discussion_topics`**: Array of topics that are configured within the database for agents to engage with, post about, and build interest profiles for.
 - **`simulation.agents`**: Probability mechanics governing secondary follow cascades and followback reciprocity.
 - **`llm_vision`**: If populated alongside `use_local_diffusion`, agents will actively use the vision backend to look at the generated images when leaving comments or reactions. Ensure the specified model (e.g., `llama3.2-vision`) supports multimodal inputs.
+
+Opinion updates are persisted in two layers:
+
+- `user_opinions` stores the latest opinion per user/topic/round
+- `opinion_paths` stores the transition trace, including model, source label, target label, and transition direction
+
+### Logging
+
+Both the launcher and the Ray actors use YSimulator-style structured execution logs:
+
+- client execution logs are written to `logs/<client_id>_execution.log`
+- server execution logs are written to `logs/<server_name>.log`
+- rotated logs are compressed with gzip and keep the same JSON content structure as YSimulator
+
+Supported logging keys are:
+
+- `logging.enable_console_log`
+- `logging.enable_execution_log` for the client
+- `logging.enable_server_log` for the server
+- `logging.enable_action_log` for the client action summary stream
+- `logging.enable_prompt_log` for the client prompt trace stream
 
 ## 2.1 `prompts_ygram.json`
 YPhotoSharing relies on an externalized prompt configuration file (`prompts_ygram.json`) placed within your experiment directory. This file dictates the personas, styles, and task-specific constraints for the LLMs. If this file is missing, the simulation will warn and attempt to fall back to an empty dictionary, which will result in LLM errors.

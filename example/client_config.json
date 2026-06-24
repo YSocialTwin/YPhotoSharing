@@ -15,10 +15,21 @@
     ],
     "opinion_dynamics": {
       "enabled": true,
+      "model_name": "llm_evaluation",
+      "evaluation_scope": "interlocutor_only",
+      "likert_scale": [
+        "Strongly disagree",
+        "Disagree",
+        "Neutral",
+        "Agree",
+        "Strongly agree"
+      ],
       "opinion_groups": {
+        "Strongly disagree": [0.0, 0.2],
+        "Disagree": [0.2, 0.4],
         "Neutral": [0.4, 0.6],
-        "Positive": [0.6, 1.0],
-        "Negative": [0.0, 0.4]
+        "Agree": [0.6, 0.8],
+        "Strongly agree": [0.8, 1.0]
       }
     },
     "agents": {
@@ -67,6 +78,9 @@
     "model": "minicpm-v"
   },
   "logging": {
-    "enable_console_log": true
+    "enable_console_log": true,
+    "enable_execution_log": true,
+    "enable_action_log": false,
+    "enable_prompt_log": false
   }
 }

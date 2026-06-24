@@ -56,7 +56,7 @@ As the simulation progresses, you will see output logging the agent actions. At 
 
 If you are running the aligned Ray actors, also inspect:
 
-- `example/logs/execution_client.log`
-- `example/logs/execution_server.log`
+- `example/logs/<client_id>_execution.log`
+- `example/logs/<server_name>.log`
 
-Those files capture the runtime events emitted from inside the actors rather than just launcher output.
+Those files capture the runtime events emitted from inside the actors rather than just launcher output, and they use the same structured JSON layout as YSimulator.

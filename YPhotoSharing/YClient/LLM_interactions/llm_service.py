@@ -7,6 +7,7 @@ Only client-side components may import this module.
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 os.environ.setdefault("LANGCHAIN_VERBOSE", "false")
@@ -15,6 +16,8 @@ import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
+
+from YPhotoSharing.common_utils import build_structured_file_logger
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +58,21 @@ class LLMService:
             "temperature": 0.7,
         }
         self.prompts_config = prompts_config or {}
+        logging_config = logging_config or {}
+        log_dir = Path(logging_config.get("log_dir", "."))
+        instance_name = str(logging_config.get("instance_name", "client"))
+        self.prompt_logger = None
+        if logging_config.get("enable_prompt_log", False):
+            self.prompt_logger = build_structured_file_logger(
+                f"YPhotoSharing.ClientPrompts.{instance_name}",
+                log_dir / f"{instance_name}_prompts.log",
+                level=logging.DEBUG,
+                backup_count=3,
+                max_bytes=50 * 1024 * 1024,
+                indent=2,
+                include_module=False,
+                propagate=False,
+            )
         base_url = _build_ollama_url(llm_config)
         self.llm = ChatOllama(
             model=llm_config.get("model", "llama3.2"),
@@ -75,6 +93,33 @@ class LLMService:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _log_prompt(self, template_key: str, payload: Dict[str, Any], response: str, *, backend: str) -> None:
+        if not self.prompt_logger:
+            return
+        safe_payload = {}
+        for key, value in payload.items():
+            if key in {"image_url", "url"} and value:
+                safe_payload[key] = "<redacted>"
+            elif key == "agent_attrs" and isinstance(value, dict):
+                safe_payload[key] = sorted(value.keys())
+            elif key == "peers_opinions" and isinstance(value, list):
+                safe_payload[key] = len(value)
+            else:
+                safe_payload[key] = value
+        self.prompt_logger.info(
+            "LLM prompt evaluated",
+            extra={
+                "extra_data": {
+                    "template": template_key,
+                    "backend": backend,
+                    "input_keys": sorted(safe_payload.keys()),
+                    "inputs": safe_payload,
+                    "response": response[:400],
+                    "response_length": len(response),
+                }
+            },
+        )
+
     def _render(self, template_key: str, **kwargs) -> str:
         cfg = self.prompts_config.get(template_key, {})
         system_tpl = cfg.get("system_template", "{persona}")
@@ -85,7 +130,9 @@ class LLMService:
         ])
         chain = prompt | self.llm | self._parser
         try:
-            return chain.invoke(kwargs).strip()
+            response = chain.invoke(kwargs).strip()
+            self._log_prompt(template_key, kwargs, response, backend="text")
+            return response
         except Exception as exc:
             logger.warning(f"LLM call failed ({template_key}): {exc}")
             return ""
@@ -151,13 +198,26 @@ class LLMService:
             ])
             chain = prompt | self.llm_v | self._parser
             try:
-                return chain.invoke({
+                response = chain.invoke({
                     "persona": persona, 
                     "caption": caption, 
                     "author": author, 
                     "image_url": image_url,
                     "mention_instruction": mention_instruction
                 }).strip()
+                self._log_prompt(
+                    "generate_comment",
+                    {
+                        "persona": persona,
+                        "caption": caption,
+                        "author": author,
+                        "image_url": image_url,
+                        "mention_instruction": mention_instruction,
+                    },
+                    response,
+                    backend="vision",
+                )
+                return response
             except Exception as exc:
                 logger.warning(f"Vision LLM call failed for comment: {exc}")
                 # Fallback to standard text LLM below
@@ -177,7 +237,9 @@ class LLMService:
         ])
         chain = prompt | self.llm_v | self._parser
         try:
-            return chain.invoke({"url": url}).strip()
+            response = chain.invoke({"url": url}).strip()
+            self._log_prompt("describe_photo", {"url": url}, response, backend="vision")
+            return response
         except Exception as exc:
             logger.warning(f"Vision LLM call failed: {exc}")
             return ""
@@ -235,11 +297,17 @@ class LLMService:
         return opinion_options[len(opinion_options) // 2]  # Fallback to middle option
 
     def evaluate_opinion(self, post_content: str, author_name: str, topic: str, current_opinion: float) -> float:
-        """Evolve the agent's opinion after reading a post."""
-        result = self._render("evaluate_opinion", post_content=post_content, author_name=author_name, topic=topic, current_opinion=current_opinion).strip()
+        """Legacy numeric opinion helper retained for compatibility."""
+        result = self._render(
+            "evaluate_opinion",
+            post_content=post_content,
+            author_name=author_name,
+            topic=topic,
+            current_opinion=current_opinion,
+        ).strip()
         try:
-            # Attempt to extract float from response
             import re
+
             match = re.search(r"[-+]?\d*\.\d+|\d+", result)
             if match:
                 score = float(match.group())
@@ -247,6 +315,34 @@ class LLMService:
         except ValueError:
             pass
         return current_opinion
+
+    def evaluate_opinion_transition(
+        self,
+        post_content: str,
+        author_name: str,
+        topic: str,
+        current_label: str,
+        author_label: str,
+        opinion_scale: List[str],
+        peers_opinions: Optional[List[tuple]] = None,
+        agent_id: str = "",
+    ) -> str:
+        """Return an AGREE / DISAGREE / NEUTRAL transition for discrete opinion updates."""
+        result = self._render(
+            "evaluate_opinion_transition",
+            post_content=post_content,
+            author_name=author_name,
+            topic=topic,
+            current_label=current_label,
+            author_label=author_label,
+            opinion_scale=" > ".join(opinion_scale),
+            peers_opinions=peers_opinions or [],
+            agent_id=agent_id,
+        ).strip().upper()
+        for token in ("AGREE", "DISAGREE", "NEUTRAL"):
+            if token in result:
+                return token
+        return "NEUTRAL"
 
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
         """Generate captions for a batch of requests sequentially."""

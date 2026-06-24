@@ -7,7 +7,7 @@ The simulator bridges the gap between algorithmic recommendation testing and eme
 The current implementation has been aligned with the engineering patterns used by `YSimulator` while keeping photo-sharing semantics intact:
 
 - photo posts persist their topic associations in `photo_topics`
-- actor logs are written to `logs/execution_client.log` and `logs/execution_server.log`
+- actor logs are written to `logs/<client_id>_execution.log` and `logs/<server_name>.log`
 - stress/reward is configured and persisted through the dedicated server table
 - client-side round orchestration is split from scheduling helpers
 
@@ -109,10 +109,15 @@ YPhotoSharing requires at least two separate processes: the central **Orchestrat
 
 Execution logs are stored under the experiment directory:
 
-- `logs/execution_client.log`
-- `logs/execution_server.log`
+- `logs/<client_id>_execution.log`
+- `logs/<server_name>.log`
 
-These files are created by the Ray actors themselves, so they contain runtime events instead of only launcher output.
+These files are created by the Ray actors themselves, are gzip-rotated, and contain structured JSON records with `timestamp`, `level`, `message`, `module`, `function`, and `line` fields. Extra fields such as `execution_time_ms` and `extra_data` are preserved when present.
+
+If enabled in `client_config.json`, the client also writes:
+
+- `logs/<client_id>_actions.log`
+- `logs/<client_id>_prompts.log`
 
 ---
 

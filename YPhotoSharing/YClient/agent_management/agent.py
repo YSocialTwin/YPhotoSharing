@@ -53,6 +53,7 @@ class Agent:
         user_data: dict,
         server,
         llm_service,
+        action_logger=None,
         action_weights: Optional[Dict[str, float]] = None,
         image_gen_service = None,
         opinion_manager = None,
@@ -67,6 +68,7 @@ class Agent:
         self.user_data = user_data
         self.server = server
         self.llm_service = llm_service
+        self.action_logger = action_logger or logger
         self.image_gen_service = image_gen_service
         self.action_weights = action_weights or {}
         self.stress_reward_system = stress_reward_system
@@ -145,8 +147,36 @@ class Agent:
                 result = await self._execute_action(action, day, hour, round_id)
                 if result:
                     results.append({"action": action, **result})
+                    self.action_logger.info(
+                        "Agent action completed",
+                        extra={
+                            "extra_data": {
+                                "agent_id": self.user_id,
+                                "username": self.username,
+                                "round_id": round_id,
+                                "day": day,
+                                "hour": hour,
+                                "action": action,
+                                "result": result,
+                            }
+                        },
+                    )
             except Exception as exc:
                 logger.warning(f"Agent {self.user_id} action '{action}' failed: {exc}")
+                self.action_logger.warning(
+                    "Agent action failed",
+                    extra={
+                        "extra_data": {
+                            "agent_id": self.user_id,
+                            "username": self.username,
+                            "round_id": round_id,
+                            "day": day,
+                            "hour": hour,
+                            "action": action,
+                            "error": str(exc),
+                        }
+                    },
+                )
 
         # Stage 7: Secondary Follows
         prob_sec = self.user_data.get("probability_of_secondary_follow", 0.0)
@@ -158,8 +188,29 @@ class Agent:
                         decision = await request_follow(self.server, self.user_id, target_id, round_id)
                         if decision == "FOLLOW":
                             results.append({"action": "secondary_follow", "target_user_id": target_id})
+                            self.action_logger.info(
+                                "Secondary follow completed",
+                                extra={
+                                    "extra_data": {
+                                        "agent_id": self.user_id,
+                                        "round_id": round_id,
+                                        "target_user_id": target_id,
+                                    }
+                                },
+                            )
                     except Exception as e:
                         logger.warning(f"Secondary follow failed for {self.user_id}: {e}")
+                        self.action_logger.warning(
+                            "Secondary follow failed",
+                            extra={
+                                "extra_data": {
+                                    "agent_id": self.user_id,
+                                    "round_id": round_id,
+                                    "target_user_id": target_id,
+                                    "error": str(e),
+                                }
+                            },
+                        )
 
         return results
 
@@ -247,6 +298,19 @@ class Agent:
             image_gen_service=self.image_gen_service,
         )
         if photo_id:
+            self.action_logger.info(
+                "Post photo completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "day": day,
+                        "hour": hour,
+                        "topic": topic,
+                        "photo_id": photo_id,
+                    }
+                },
+            )
             return {"photo_id": photo_id, "topic": topic}
         return None
 
@@ -272,6 +336,17 @@ class Agent:
         if reaction:
             if hasattr(self, "interacted_users") and "user_id" in photo:
                 self.interacted_users.add(photo["user_id"])
+            self.action_logger.info(
+                "React action completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "photo_id": photo.get("id"),
+                        "reaction": reaction,
+                    }
+                },
+            )
             return {"reaction": reaction, "photo_id": photo.get("id")}
         return None
 
@@ -298,6 +373,17 @@ class Agent:
         if comment_id:
             if hasattr(self, "interacted_users") and "user_id" in photo:
                 self.interacted_users.add(photo["user_id"])
+            self.action_logger.info(
+                "Comment action completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "photo_id": photo.get("id"),
+                        "comment_id": comment_id,
+                    }
+                },
+            )
             return {"comment_id": comment_id, "photo_id": photo.get("id")}
         return None
 
@@ -312,6 +398,17 @@ class Agent:
             follower_id=self.user_id,
             user_id=target.get("id"),
             round_id=round_id
+        )
+        self.action_logger.info(
+            "Follow action completed",
+            extra={
+                "extra_data": {
+                    "agent_id": self.user_id,
+                    "round_id": round_id,
+                    "target_user_id": target.get("id"),
+                    "decision": decision,
+                }
+            },
         )
         return {"follow_decision": decision, "target_user_id": target.get("id")}
 
@@ -350,6 +447,16 @@ class Agent:
         photo = random.choice(feed)
         success = await save_photo(self.server, self.user_id, photo["id"])
         if success:
+            self.action_logger.info(
+                "Save action completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "photo_id": photo["id"],
+                    }
+                },
+            )
             return {"photo_id": photo["id"]}
         return None
 
@@ -381,6 +488,17 @@ class Agent:
             stress_reward_backward_rounds=self.stress_reward_backward_rounds,
         )
         if success:
+            self.action_logger.info(
+                "Reply comment completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "photo_id": photo["id"],
+                        "parent_comment_id": parent_comment["id"],
+                    }
+                },
+            )
             return {"photo_id": photo["id"], "parent_comment_id": parent_comment["id"]}
         return None
 
@@ -391,6 +509,16 @@ class Agent:
         target = random.choice(following)
         success = await unfollow_user(self.server, self.user_id, target, round_id)
         if success:
+            self.action_logger.info(
+                "Unfollow action completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "target_user_id": target,
+                    }
+                },
+            )
             return {"target_user_id": target}
         return None
 
@@ -414,6 +542,17 @@ class Agent:
             cluster_id=self.cluster_id
         )
         if success:
+            self.action_logger.info(
+                "DM action completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "target_user_id": target,
+                        "photo_id": photo_id,
+                    }
+                },
+            )
             return {"target_user_id": target, "photo_id": photo_id}
         return None
 
@@ -433,12 +572,37 @@ class Agent:
             agent_attrs=agent_attrs,
         )
         if story_id:
+            self.action_logger.info(
+                "Post story completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "day": day,
+                        "hour": hour,
+                        "story_id": story_id,
+                    }
+                },
+            )
             return {"story_id": story_id}
         return None
 
     async def _action_watch_story(self, round_id: str) -> Optional[dict]:
-        return await watch_story(
+        story_id = await watch_story(
             server=self.server,
             user_id=self.user_id,
             round_id=round_id,
         )
+        if story_id:
+            self.action_logger.info(
+                "Watch story completed",
+                extra={
+                    "extra_data": {
+                        "agent_id": self.user_id,
+                        "round_id": round_id,
+                        "story_id": story_id,
+                    }
+                },
+            )
+            return {"story_id": story_id}
+        return None

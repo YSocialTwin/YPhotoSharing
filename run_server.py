@@ -42,13 +42,12 @@ def main():
         config = json.load(f)
         
     global logger
-    enable_console = config.get("logging", {}).get("enable_console_log", True)
-    logger = setup_logging(config_dir, "server", enable_console)
-
     server_name = config.get("server_name", "orchestrator_server")
     namespace = config.get("namespace", "yphotosharing")
     min_to_start = config.get("min_to_start", 1)
     timeout_seconds = config.get("timeout_seconds", 60)
+    logging_config = config.get("logging", {})
+    logger = setup_logging(config_dir, "server", logging_config, instance_name=server_name)
 
     # Database config
     db_config = config.get("database", {}) or {"type": "sqlite", "sqlite": {"filename": "yphotosharing.db"}}

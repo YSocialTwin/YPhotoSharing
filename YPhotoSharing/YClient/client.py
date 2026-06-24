@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import ray
 
-from YPhotoSharing.common_utils import setup_logging
+from YPhotoSharing.common_utils import build_structured_file_logger, setup_logging
 from YPhotoSharing.YClient.agent_management.agent import Agent
 from YPhotoSharing.YClient.simulation.round_planner import SimulationRoundPlanner
 
@@ -79,15 +79,28 @@ class SimulationClient:
         self.client_id = client_id
         self.config_path = Path(config_path)
         self.simulation_config = simulation_config or {}
+        logging_config = dict(logging_config or {})
+        logging_config.setdefault("log_dir", str(self.config_path / "logs"))
+        logging_config.setdefault("instance_name", self.client_id)
         self._agents: List[Agent] = []
         self._round_count = 0
         self._start_time = time.time()
         self.round_planner = SimulationRoundPlanner(self.simulation_config)
 
         global logger
-        enable_console = (logging_config or {}).get("enable_console_log", True)
-        logger = setup_logging(self.config_path, "client", enable_console)
+        logger = setup_logging(
+            self.config_path,
+            "client",
+            logging_config,
+            instance_name=self.client_id,
+        )
         self.logger = logger
+        self.action_logger = None
+        if logging_config.get("enable_action_log", False):
+            self.action_logger = build_structured_file_logger(
+                f"YPhotoSharing.ClientActions.{self.client_id}",
+                self.config_path / "logs" / f"{self.client_id}_actions.log",
+            )
 
         # Connect to server
         for i in range(10):
@@ -103,7 +116,7 @@ class SimulationClient:
         llm_config = llm_config or {"address": "localhost", "port": 11434, "model": "llama3.2"}
         prompts_config = prompts_config or {}
         self.llm_service = _build_llm_service(
-            llm_config, prompts_config, llm_v_config, logging_config or {}
+            llm_config, prompts_config, llm_v_config, logging_config
         )
 
         from YPhotoSharing.YClient.stress_reward import StressRewardSystem, build_stress_reward_settings_from_config
@@ -230,17 +243,20 @@ class SimulationClient:
                 logger.warning(f"Could not register user {u.get('id')} or opinions: {e}")
             weights = self.round_planner.build_action_weights(u)
 
-            self._agents.append(Agent(
-                user_data=u, 
-                server=self.server, 
-            llm_service=self.llm_service,
-            image_gen_service=self.image_gen_service,
-            action_weights=weights,
-            opinion_manager=self.opinion_manager,
-            stress_reward_system=self.stress_reward_system,
-            stress_reward_enabled=self.stress_reward_enabled,
-            stress_reward_backward_rounds=self.stress_reward_backward_rounds,
-        ))
+            self._agents.append(
+                Agent(
+                    user_data=u,
+                    server=self.server,
+                    llm_service=self.llm_service,
+                    action_logger=self.action_logger,
+                    image_gen_service=self.image_gen_service,
+                    action_weights=weights,
+                    opinion_manager=self.opinion_manager,
+                    stress_reward_system=self.stress_reward_system,
+                    stress_reward_enabled=self.stress_reward_enabled,
+                    stress_reward_backward_rounds=self.stress_reward_backward_rounds,
+                )
+            )
         logger.info(f"Client {self.client_id}: loaded {len(self._agents)} agents")
         return len(self._agents)
 
@@ -267,6 +283,20 @@ class SimulationClient:
             "actions": sum(len(r) for r in all_results),
         }
         logger.info(f"Round {day}/{hour} complete: {summary['actions']} actions")
+        if self.action_logger:
+            self.action_logger.info(
+                "Client round completed",
+                extra={
+                    "extra_data": {
+                        "client_id": self.client_id,
+                        "round": self._round_count,
+                        "day": day,
+                        "hour": hour,
+                        "actions": summary["actions"],
+                        "agents": len(self._agents),
+                    }
+                },
+            )
 
         # Signal readiness to advance
         await self.server.ready_for_next_round.remote(self.client_id)
