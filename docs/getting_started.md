@@ -38,7 +38,8 @@ Navigate to the `example/` directory. You will find:
   `photo_sharing` block and will be preserved by the loader. The current
   example mirrors the implemented runtime fields, including `attention_budget`,
   `daily_activity_level`, `round_actions`, `is_private`, `is_verified`,
-  `recsys_type`, `custom_features`, and `photo_sharing.creator_tier`.
+  `recsys_type`, `custom_features`, `photo_sharing.story_visibility`, and
+  `photo_sharing.creator_tier`.
   `daily_activity_level` affects slot selection, `round_actions` caps per-slot
   action attempts, and `attention_budget` limits the total cost of those
   attempts. Churn and new-user injection are configured in `client_config.json`
