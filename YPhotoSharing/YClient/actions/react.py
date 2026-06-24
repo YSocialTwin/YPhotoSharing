@@ -53,7 +53,11 @@ async def react_to_photo(
 
     if is_llm_agent:
         try:
-            reaction = await llm_service.decide_reaction.remote(caption=caption)
+            reaction = await llm_service.decide_reaction.remote(
+                caption=caption,
+                cluster_id=cluster_id,
+                agent_attrs=agent_attrs,
+            )
         except Exception as exc:
             logger.warning(f"Reaction decision failed for user {user_id}: {exc}")
             reaction = "IGNORE"

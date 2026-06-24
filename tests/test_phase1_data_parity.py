@@ -5,6 +5,7 @@ from YPhotoSharing.YClient.simulation.bootstrap import (
     normalize_agent_config,
     normalize_agent_population_document,
 )
+from YPhotoSharing.YClient.LLM_interactions.llm_service import _format_persona_context
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 
 
@@ -77,3 +78,46 @@ def test_legacy_list_population_is_normalized_to_agents_document():
 
     assert population["agents"][0]["username"] == "alice"
     assert population["generation_config"]["num_additional_agents"] == 0
+
+
+def test_persona_context_uses_profile_and_photo_sharing_details():
+    persona = _format_persona_context(
+        {
+            "age": 29,
+            "gender": "female",
+            "nationality": "US",
+            "education_level": "college",
+            "profession": "traveler",
+            "leaning": "neutral",
+            "activity_profile": "high",
+            "archetype": "explorer",
+            "language": "en",
+            "oe": "high",
+            "co": "medium",
+            "ex": "high",
+            "ag": "medium",
+            "ne": "low",
+            "is_verified": True,
+            "is_private": False,
+            "is_page": 0,
+            "bio": "Travel and food lover",
+            "interests": ["travel", "food"],
+            "custom_features": {
+                "aesthetic": "warm travel diary",
+                "tone": "curious and friendly",
+            },
+            "photo_sharing": {
+                "favorite_filters": ["warm", "vintage"],
+                "story_visibility": "followers",
+                "creator_tier": "standard",
+            },
+        }
+    )
+
+    assert "29-year-old" in persona
+    assert "female" in persona
+    assert "from US" in persona
+    assert "verified account" in persona
+    assert "Interests: travel, food." in persona
+    assert "favorite filters: warm, vintage" in persona
+    assert "Additional personal details: aesthetic: warm travel diary; tone: curious and friendly." in persona

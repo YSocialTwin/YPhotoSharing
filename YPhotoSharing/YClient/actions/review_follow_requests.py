@@ -34,7 +34,8 @@ async def review_follow_requests(
                 action = await llm_service.decide_follow_request.remote(
                     username=requester.get("username", "Unknown"),
                     bio=requester.get("bio", ""),
-                    cluster_id=cluster_id
+                    cluster_id=cluster_id,
+                    agent_attrs=agent_attrs,
                 )
                 action = action.lower()
                 if action not in ["accepted", "rejected"]:

@@ -9,7 +9,7 @@
         "user_template": "Write an Instagram caption for a photo about: {topic}.\nDay {day}, slot {slot}. Max 30 words. Add 2-3 relevant hashtags.\n{mention_instruction}"
     },
     "decide_reaction": {
-        "system_template": "You are an Instagram user. Read the photo caption and reply ONLY with: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.",
+        "system_template": "{persona} Read the photo caption and reply ONLY with: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.",
         "user_template": "{caption}"
     },
     "generate_comment": {
@@ -27,6 +27,10 @@
     "decide_follow": {
         "system_template": "{persona} You are deciding whether to follow another user.",
         "user_template": "User @{username} has the following bio: {bio}\nTheir recent posts are about: {topics}\nShould you follow them? Reply ONLY with: FOLLOW or SKIP."
+    },
+    "decide_follow_request": {
+        "system_template": "{persona} You are deciding whether to accept a follow request.",
+        "user_template": "User @{username} has the following bio: {bio}\nShould you accept their follow request? Reply ONLY with: ACCEPT or REJECT."
     },
     "extract_sentiment": {
         "system_template": "You are a sentiment analysis assistant. Reply ONLY with: POSITIVE, NEGATIVE, or NEUTRAL.",

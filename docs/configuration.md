@@ -204,6 +204,7 @@ The top level should contain an `agents` array, and may also include a
 ```
 
 - **`photo_sharing`**: Optional nested block for photo-platform-only fields such as `cover_image`, `story_visibility`, `favorite_filters`, or `creator_tier`.
+- **Prompt personas**: the client builds LLM personas from the full agent record, including age, gender, nationality, education, profession, personality traits, interests, bio, account status, and any `custom_features` you provide. `photo_sharing` metadata is also surfaced when present.
 - **`user_type`**: Set to `llm` for prompt-driven agents or `rule_based` for deterministic agents. The loader maps this to the internal `llm` flag.
 - **`attention_budget`**: Controls how many actions the agent can perform per slot. Higher numbers yield more hyperactive agents.
 - **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.

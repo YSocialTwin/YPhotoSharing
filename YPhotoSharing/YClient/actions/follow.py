@@ -50,6 +50,7 @@ async def follow_user(
                 bio=bio,
                 topics=topics,
                 cluster_id=cluster_id,
+                agent_attrs=agent_attrs,
             )
         except Exception as exc:
             logger.warning(f"Follow decision failed for user {follower_id}: {exc}")

@@ -39,7 +39,127 @@ def _estimate_tokens_from_text(*parts: Any) -> int:
         return 0
     return max(1, len(text) // 4)
 
+def _join_nonempty(values: List[Any], separator: str = ", ") -> str:
+    return separator.join(
+        str(value).strip()
+        for value in values
+        if value is not None and str(value).strip()
+    )
 
+
+def _format_custom_features(agent_attrs: Optional[Dict[str, Any]]) -> str:
+    custom_features = dict((agent_attrs or {}).get("custom_features") or {})
+    if not custom_features:
+        return ""
+
+    parts: List[str] = []
+    for key in sorted(custom_features.keys(), key=lambda value: str(value).lower()):
+        label = str(key).strip()
+        if not label:
+            continue
+        raw_value = custom_features.get(key)
+        value = str(raw_value).strip() if raw_value is not None else ""
+        parts.append(f"{label}: {value}" if value else label)
+
+    if not parts:
+        return ""
+    return f"Additional personal details: {'; '.join(parts)}."
+
+
+def _format_persona_context(agent_attrs: Optional[Dict[str, Any]]) -> str:
+    attrs = agent_attrs or {}
+    if not attrs:
+        return ""
+
+    clauses: List[str] = []
+
+    age = attrs.get("age")
+    gender = str(attrs.get("gender") or "").strip()
+    nationality = str(attrs.get("nationality") or "").strip()
+    education_level = str(attrs.get("education_level") or "").strip()
+    profession = str(attrs.get("profession") or "").strip()
+    leaning = str(attrs.get("leaning") or "").strip()
+    activity_profile = str(attrs.get("activity_profile") or "").strip()
+    archetype = str(attrs.get("archetype") or "").strip()
+    language = str(attrs.get("language") or "").strip()
+    bio = str(attrs.get("bio") or "").strip()
+
+    profile_bits: List[str] = []
+    if age not in (None, ""):
+        profile_bits.append(f"{age}-year-old")
+    if gender:
+        profile_bits.append(gender)
+    if nationality:
+        profile_bits.append(f"from {nationality}")
+    if education_level:
+        profile_bits.append(f"educated to {education_level} level")
+    if profession:
+        profile_bits.append(f"working as a {profession}")
+    if leaning:
+        profile_bits.append(f"politically {leaning}")
+    if activity_profile:
+        profile_bits.append(f"activity profile {activity_profile}")
+    if archetype:
+        profile_bits.append(f"archetype {archetype}")
+    if language:
+        profile_bits.append(f"speaks {language}")
+    if profile_bits:
+        clauses.append(f"Profile: {', '.join(profile_bits)}.")
+
+    trait_labels = [
+        ("oe", "openness"),
+        ("co", "conscientiousness"),
+        ("ex", "extraversion"),
+        ("ag", "agreeableness"),
+        ("ne", "neuroticism"),
+    ]
+    trait_bits = [
+        f"{label}={attrs.get(key)}"
+        for key, label in trait_labels
+        if attrs.get(key) not in (None, "")
+    ]
+    if trait_bits:
+        clauses.append(f"Personality traits: {'; '.join(trait_bits)}.")
+
+    status_bits: List[str] = []
+    if attrs.get("is_verified"):
+        status_bits.append("verified account")
+    if attrs.get("is_private"):
+        status_bits.append("private account")
+    if attrs.get("is_page"):
+        status_bits.append("page account")
+    if attrs.get("toxicity") not in (None, ""):
+        status_bits.append(f"toxicity preference {attrs.get('toxicity')}")
+    if status_bits:
+        clauses.append(f"Account status: {', '.join(status_bits)}.")
+
+    interests = attrs.get("interests") or []
+    if isinstance(interests, list) and interests:
+        clauses.append(f"Interests: {_join_nonempty(interests)}.")
+
+    if bio:
+        clauses.append(f"Bio: {bio}.")
+
+    photo_sharing = attrs.get("photo_sharing")
+    if isinstance(photo_sharing, dict) and photo_sharing:
+        photo_bits: List[str] = []
+        favorite_filters = photo_sharing.get("favorite_filters") or []
+        if isinstance(favorite_filters, list) and favorite_filters:
+            photo_bits.append(f"favorite filters: {_join_nonempty(favorite_filters)}")
+        story_visibility = str(photo_sharing.get("story_visibility") or "").strip()
+        if story_visibility:
+            photo_bits.append(f"story visibility: {story_visibility}")
+        creator_tier = str(photo_sharing.get("creator_tier") or "").strip()
+        if creator_tier:
+            photo_bits.append(f"creator tier: {creator_tier}")
+        if photo_bits:
+            clauses.append(f"Photo-sharing profile: {'; '.join(photo_bits)}.")
+
+    custom_features = _format_custom_features(attrs)
+    if custom_features:
+        clauses.append(custom_features)
+
+    return " ".join(clauses)
 
 
 
@@ -162,6 +282,13 @@ class LLMService:
         personas = self.prompts_config.get("personas", {})
         return personas.get(str(cluster_id), personas.get("0", "You are an Instagram user."))
 
+    def _build_persona(self, cluster_id: int, agent_attrs: Optional[dict] = None) -> str:
+        persona = self._get_persona(cluster_id)
+        agent_context = _format_persona_context(agent_attrs)
+        if agent_context:
+            return f"{persona.rstrip()} {agent_context}"
+        return persona
+
     # ------------------------------------------------------------------
     # Public API (called via ray.remote)
     # ------------------------------------------------------------------
@@ -169,7 +296,7 @@ class LLMService:
     def generate_caption(self, topic: str, day: int, slot: int,
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Generate an Instagram caption for a photo."""
-        persona = self._get_persona(cluster_id)
+        persona = self._build_persona(cluster_id, agent_attrs)
         mention_instruction = ""
         if agent_attrs and "following_usernames" in agent_attrs and agent_attrs["following_usernames"]:
             users = ", ".join([f"@{u}" for u in agent_attrs["following_usernames"]])
@@ -178,10 +305,14 @@ class LLMService:
         return self._render("generate_caption", persona=persona, topic=topic,
                             day=day, slot=slot, mention_instruction=mention_instruction)
 
-    def decide_reaction(self, caption: str, cluster_id: int = 0) -> str:
+    def decide_reaction(self, caption: str, cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Decide how to react to a photo (LIKE / LOVE / LAUGH / WOW / SAD / ANGRY / IGNORE)."""
-        result = self._render("decide_reaction", caption=caption,
-                              cluster_id=cluster_id).upper()
+        result = self._render(
+            "decide_reaction",
+            caption=caption,
+            cluster_id=cluster_id,
+            persona=self._build_persona(cluster_id, agent_attrs),
+        ).upper()
         allowed = {"LIKE", "LOVE", "LAUGH", "WOW", "SAD", "ANGRY", "IGNORE"}
         return result if result in allowed else "LIKE"
 
@@ -189,7 +320,7 @@ class LLMService:
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None,
                          image_url: Optional[str] = None) -> str:
         """Generate a comment on a photo."""
-        persona = self._get_persona(cluster_id)
+        persona = self._build_persona(cluster_id, agent_attrs)
         
         mention_instruction = f"You may @mention the author (@{author}). "
         memory_context = ""
@@ -291,19 +422,28 @@ class LLMService:
         return "Neutral"
 
     def decide_follow(self, username: str, bio: str, topics: str,
-                      cluster_id: int = 0) -> str:
+                      cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Decide whether to follow a user (FOLLOW / SKIP)."""
-        persona = self._get_persona(cluster_id)
-        result = self._render("decide_follow", persona=persona,
-                              username=username, bio=bio or "", topics=topics or "").upper()
+        persona = self._build_persona(cluster_id, agent_attrs)
+        result = self._render(
+            "decide_follow",
+            persona=persona,
+            username=username,
+            bio=bio or "",
+            topics=topics or "",
+        ).upper()
         return "FOLLOW" if "FOLLOW" in result else "SKIP"
 
     def decide_follow_request(self, username: str, bio: str,
-                              cluster_id: int = 0) -> str:
+                              cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Decide whether to accept a follow request (ACCEPT / REJECT)."""
-        persona = self._get_persona(cluster_id)
-        result = self._render("decide_follow_request", persona=persona,
-                              username=username, bio=bio or "").upper()
+        persona = self._build_persona(cluster_id, agent_attrs)
+        result = self._render(
+            "decide_follow_request",
+            persona=persona,
+            username=username,
+            bio=bio or "",
+        ).upper()
         return "ACCEPT" if "ACCEPT" in result else "REJECT"
 
     # ------------------------------------------------------------------
