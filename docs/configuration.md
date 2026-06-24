@@ -204,5 +204,6 @@ The top level should contain an `agents` array, and may also include a
 ```
 
 - **`photo_sharing`**: Optional nested block for photo-platform-only fields such as `cover_image`, `story_visibility`, `favorite_filters`, or `creator_tier`.
+- **`user_type`**: Set to `llm` for prompt-driven agents or `rule_based` for deterministic agents. The loader maps this to the internal `llm` flag.
 - **`attention_budget`**: Controls how many actions the agent can perform per slot. Higher numbers yield more hyperactive agents.
 - **`is_private`**: If true, agents will accumulate follow requests and review them at slot 0 (midnight) using the LLM.
