@@ -72,6 +72,19 @@ def test_photo_sharing_fields_can_be_embedded_in_agent_population_records():
     assert record["photo_sharing"]["creator_tier"] == "pro"
 
 
+def test_legacy_string_recsys_type_is_coerced_to_numeric_cluster():
+    record = normalize_agent_config(
+        {
+            "id": "user-1",
+            "username": "alice",
+            "recsys_type": "random",
+        },
+        simulation_config={},
+    )
+
+    assert record["recsys_type"] == 0
+
+
 def test_legacy_list_population_is_normalized_to_agents_document():
     population = normalize_agent_population_document(
         [{"id": "user-1", "username": "alice"}]

@@ -15,6 +15,7 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     resolve_photo_topic_ids,
 )
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_reaction
+from YPhotoSharing.YClient.simulation.bootstrap import coerce_cluster_id
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ async def react_to_photo(
     """
     caption = photo.get("caption", "")
     photo_id = photo.get("id", "")
-    cluster_id = int((agent_attrs or {}).get("recsys_type") or 0)
+    cluster_id = coerce_cluster_id((agent_attrs or {}).get("recsys_type"))
     is_llm_agent = bool((agent_attrs or {}).get("llm", True))
 
     if is_llm_agent:

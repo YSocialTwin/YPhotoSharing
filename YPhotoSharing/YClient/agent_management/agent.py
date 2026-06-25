@@ -29,6 +29,7 @@ from YPhotoSharing.YClient.actions.review_follow_requests import review_follow_r
 # Story actions
 from YPhotoSharing.YClient.actions.post_story import post_story
 from YPhotoSharing.YClient.actions.watch_story import watch_story
+from YPhotoSharing.YClient.simulation.bootstrap import coerce_cluster_id
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ class Agent:
         self.user_id: str = user_data["id"]
         self.username: str = user_data.get("username", "agent")
         self.opinion_manager = opinion_manager
-        self.cluster_id: int = int(user_data.get("recsys_type") or 0)
+        self.cluster_id: int = coerce_cluster_id(user_data.get("recsys_type"))
         self.user_data = user_data
         self.server = server
         self.llm_service = llm_service

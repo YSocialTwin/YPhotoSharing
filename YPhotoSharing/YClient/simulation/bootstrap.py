@@ -4,6 +4,23 @@ import random
 from typing import Dict, List, Optional
 
 
+def coerce_cluster_id(value) -> int:
+    """Convert legacy/non-numeric recsys_type values into a valid persona cluster id."""
+    if value is None:
+        return 0
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    text = str(value).strip()
+    if not text:
+        return 0
+    try:
+        return int(text)
+    except (TypeError, ValueError):
+        return 0
+
+
 def normalize_agent_population_document(population):
     """Normalize a population config into the YSimulator-style document format."""
     if isinstance(population, list):
@@ -93,6 +110,7 @@ def normalize_agent_config(user_config: dict, simulation_config: Optional[dict])
     enriched.setdefault("is_verified", False)
     enriched.setdefault("attention_budget", 100)
     enriched.setdefault("frecsys_type", enriched.get("recsys_type", "default"))
+    enriched["recsys_type"] = coerce_cluster_id(enriched.get("recsys_type"))
     enriched.setdefault("feed_url", None)
     enriched.setdefault("opinions", {})
     enriched.setdefault("stubborn_topics", [])

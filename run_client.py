@@ -37,8 +37,18 @@ def main():
     )
     args = parser.parse_args()
 
-    config_dir = validate_config_directory(args.config, required_files=["client_config.json"])
-    config_file = config_dir / "client_config.json"
+    config_input = Path(args.config).expanduser().resolve()
+    if config_input.is_file():
+        config_dir = config_input.parent
+        config_file = config_input
+        if not config_file.exists():
+            print(f"❌ Error: Configuration file does not exist: '{config_file}'")
+            sys.exit(1)
+    else:
+        config_dir = validate_config_directory(
+            args.config, required_files=["client_config.json"]
+        )
+        config_file = config_dir / "client_config.json"
 
     with open(config_file) as f:
         config = json.load(f)
