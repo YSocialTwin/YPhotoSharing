@@ -11,7 +11,11 @@
   },
   "simulation": {
     "num_rounds": 48,
-    "posts_per_round": 5
+    "posts_per_round": 5,
+    "enable_sentiment": true,
+    "enable_emotion_annotation": true,
+    "enable_toxicity": false,
+    "perspective_api_key": null
   },
   "logging": {
     "enable_server_log": true,

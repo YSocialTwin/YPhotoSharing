@@ -1,0 +1,2 @@
+"""YPhotoSharing package."""
+
