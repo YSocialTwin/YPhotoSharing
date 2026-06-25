@@ -11,8 +11,23 @@ from typing import Any, Dict, Optional
 
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_caption
+from YPhotoSharing.YClient.text_processing import annotate_content
 
 logger = logging.getLogger(__name__)
+
+
+def _annotation_config(agent_attrs: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    attrs = agent_attrs or {}
+    return {
+        "simulation": {
+            "enable_sentiment": bool(attrs.get("enable_sentiment", False)),
+            "enable_emotion_annotation": bool(attrs.get("enable_emotion_annotation", True)),
+            "enable_toxicity": bool(attrs.get("enable_toxicity", False)),
+            "perspective_api_key": attrs.get("perspective_api_key"),
+        }
+    }
+
+
 async def post_photo(
     server,
     llm_service,
@@ -115,27 +130,34 @@ async def post_photo(
         "topic": topic,
         "topics": [topic],
     }
+    annotations = annotate_content(caption, _annotation_config(agent_attrs), llm_handle=llm_service)
 
     try:
         photo_id = await server.post_photo.remote(photo_data)
-        
-        # Annotation toggles mirror the config options documented in MkDocs.
-        if agent_attrs and agent_attrs.get("enable_emotion_annotation", True):
-            try:
-                emotion = await llm_service.extract_emotion.remote(caption)
-                if emotion:
-                    await server.add_photo_emotion.remote(photo_id, emotion)
-            except Exception as e:
-                logger.warning(f"Failed to extract emotion for photo {photo_id}: {e}")
 
-        # Stage 5: Sentiment Annotation
-        if agent_attrs and agent_attrs.get("enable_sentiment"):
-            try:
-                sentiment_score = await llm_service.extract_sentiment.remote(caption)
-                await server.update_photo_sentiment.remote(photo_id, sentiment_score)
-            except Exception as e:
-                logger.warning(f"Failed to extract sentiment for photo {photo_id}: {e}")
-            
+        try:
+            topic_ids = []
+            if getattr(server, "get_photo_topics", None) is not None:
+                topic_ids = await server.get_photo_topics.remote(photo_id)
+            annotations["topic_ids"] = topic_ids
+            annotations["topics"] = topic_ids or list(photo_data.get("topics", []))
+            annotations["round"] = round_id
+
+            if getattr(server, "process_annotations", None) is not None:
+                await server.process_annotations.remote(
+                    photo_id,
+                    user_id,
+                    annotations,
+                    is_post=True,
+                )
+
+            sentiment = annotations.get("sentiment") or {}
+            compound = sentiment.get("compound") if isinstance(sentiment, dict) else None
+            if compound is not None and getattr(server, "update_photo_sentiment", None) is not None:
+                await server.update_photo_sentiment.remote(photo_id, compound)
+        except Exception as e:
+            logger.warning(f"Failed to process annotations for photo {photo_id}: {e}")
+
         logger.debug(f"User {user_id} posted photo {photo_id}")
         return photo_id
     except Exception as exc:

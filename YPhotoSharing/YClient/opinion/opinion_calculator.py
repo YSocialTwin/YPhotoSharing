@@ -263,19 +263,19 @@ class OpinionCalculator:
 
         if evaluation_scope == "neighbors":
             # Get neighbors' opinions from server
-                neighbor_opinion_values = ray.get(
-                    self.server.get_neighbors_opinions.remote(
-                        agent_id, topic_id, client_id=self.client_id
-                    )
+            neighbor_opinion_values = ray.get(
+                self.server.get_neighbors_opinions.remote(
+                    agent_id, topic_id, client_id=self.client_id
                 )
+            )
 
-                if neighbor_opinion_values:
-                    # Convert to opinion labels and count occurrences
-                    opinion_groups = self.opinion_config.get("opinion_groups", {})
-                    neighbor_labels = [
-                        get_opinion_group(val, opinion_groups) for val in neighbor_opinion_values
-                    ]
-                    peers_opinions = list(Counter(neighbor_labels).items())
+            if neighbor_opinion_values:
+                # Convert to opinion labels and count occurrences
+                opinion_groups = self.opinion_config.get("opinion_groups", {})
+                neighbor_labels = [
+                    get_opinion_group(val, opinion_groups) for val in neighbor_opinion_values
+                ]
+                peers_opinions = list(Counter(neighbor_labels).items())
 
         # Calculate new opinion using LLM evaluation
         return llm_evaluation(
@@ -283,7 +283,6 @@ class OpinionCalculator:
             y=author_opinion,
             text=post_content,
             topic=topic_name,
-            author_name=parent_post_data.get("username") or parent_author_id,
             evaluation_scope=evaluation_scope,
             cold_start=params.get("cold_start", "neutral"),
             group_classes=self.opinion_config.get("opinion_groups", {}),

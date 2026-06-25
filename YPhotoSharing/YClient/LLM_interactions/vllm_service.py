@@ -17,6 +17,37 @@ from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
 
 logger = logging.getLogger(__name__)
 
+_GOEMOTIONS = {
+    "admiration",
+    "amusement",
+    "anger",
+    "annoyance",
+    "approval",
+    "caring",
+    "confusion",
+    "curiosity",
+    "desire",
+    "disappointment",
+    "disapproval",
+    "disgust",
+    "embarrassment",
+    "excitement",
+    "fear",
+    "gratitude",
+    "grief",
+    "joy",
+    "love",
+    "nervousness",
+    "optimism",
+    "pride",
+    "realization",
+    "relief",
+    "remorse",
+    "sadness",
+    "surprise",
+    "trust",
+}
+
 _VLLM_AVAILABLE = False
 try:
     from vllm import LLM, SamplingParams  # noqa: F401
@@ -235,6 +266,20 @@ class VLLMService:
                 output_tokens=_estimate_tokens_from_text(result),
             )
         return result
+
+    def extract_emotions(self, text: str) -> List[str]:
+        prompt = (
+            "Identify emotions from this text using ONLY GoEmotions labels: "
+            "admiration, amusement, anger, annoyance, approval, caring, confusion, "
+            "curiosity, desire, disappointment, disapproval, disgust, embarrassment, "
+            "excitement, fear, gratitude, grief, joy, love, nervousness, optimism, "
+            "pride, realization, relief, remorse, sadness, surprise, trust.\n\n"
+            f'Text: "{text}"\n\nReturn emotions as a comma-separated list.'
+        )
+        results = self._batch_generate([prompt], method_name="extract_emotions")
+        raw = results[0] if results else ""
+        parsed = [token.strip().lower() for token in raw.split(",") if token.strip()]
+        return [emotion for emotion in parsed if emotion in _GOEMOTIONS]
 
     def get_capabilities(self) -> Dict[str, Any]:
         return {

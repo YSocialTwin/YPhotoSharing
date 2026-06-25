@@ -408,18 +408,50 @@ class LLMService:
             logger.warning(f"Vision LLM call failed: {exc}")
             return ""
 
+    def extract_emotions(self, text: str) -> List[str]:
+        """Extract GoEmotions labels from text using the YSimulator-compatible prompt."""
+        result = self._render("extract_emotions", text=text)
+        emotion_list = {
+            "admiration",
+            "amusement",
+            "anger",
+            "annoyance",
+            "approval",
+            "caring",
+            "confusion",
+            "curiosity",
+            "desire",
+            "disappointment",
+            "disapproval",
+            "disgust",
+            "embarrassment",
+            "excitement",
+            "fear",
+            "gratitude",
+            "grief",
+            "joy",
+            "love",
+            "nervousness",
+            "optimism",
+            "pride",
+            "realization",
+            "relief",
+            "remorse",
+            "sadness",
+            "surprise",
+            "trust",
+        }
+        parsed = [
+            token.strip().lower()
+            for token in str(result).replace("[", "").replace("]", "").split(",")
+            if token.strip()
+        ]
+        return [emotion for emotion in parsed if emotion in emotion_list]
+
     def extract_emotion(self, text: str) -> str:
-        """Extract primary emotion from text."""
-        result = self._render("extract_emotion", text=text)
-        
-        # Clean up common wrapper words
-        emotion = result.strip().title()
-        valid_emotions = ["Joy", "Sadness", "Anger", "Fear", "Surprise", "Disgust", "Trust", "Anticipation", "Neutral"]
-        
-        for e in valid_emotions:
-            if e.upper() in result.upper():
-                return e
-        return "Neutral"
+        """Backward-compatible single-emotion helper."""
+        emotions = self.extract_emotions(text)
+        return emotions[0] if emotions else "neutral"
 
     def decide_follow(self, username: str, bio: str, topics: str,
                       cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:

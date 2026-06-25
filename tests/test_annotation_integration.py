@@ -1,6 +1,7 @@
 from YPhotoSharing.YClient.text_processing import annotate_content
 from YPhotoSharing.YServer.annotation_processor import AnnotationProcessor
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
+from YPhotoSharing.YServer.classes.models import PostEmotion, PostSentiment, PostToxicity
 
 
 def test_annotation_pipeline_follows_config_flags(monkeypatch):
@@ -78,3 +79,34 @@ def test_database_middleware_initializes_goemotions():
 
     assert db.get_emotion_by_name("joy") is not None
     assert db.get_emotion_by_name("trust") is not None
+
+
+def test_annotation_processor_persists_generic_annotation_tables():
+    db = DatabaseMiddleware()
+    db.initialize_emotions_table()
+    round_id = db.get_or_create_round(0, 0)
+    user_id = db.create_user({"id": "user-1", "username": "alice", "password": "secret"})
+    topic_id = db.get_or_create_interest("travel")
+    processor = AnnotationProcessor(
+        metadata_service=db,
+        enable_sentiment=True,
+        enable_emotion_annotation=True,
+        enable_toxicity=True,
+    )
+
+    annotations = {
+        "hashtags": ["sunset"],
+        "mentions": [],
+        "sentiment": {"neg": 0.1, "pos": 0.3, "neu": 0.6, "compound": 0.2},
+        "toxicity": {"TOXICITY": 0.05, "INSULT": 0.01},
+        "emotions": ["joy"],
+        "topic_ids": [topic_id],
+        "round": round_id,
+    }
+
+    processor._process_annotations("post-3", user_id, annotations, is_post=True)
+
+    with db.session_scope() as session:
+        assert session.query(PostSentiment).filter_by(post_id="post-3").count() == 1
+        assert session.query(PostToxicity).filter_by(post_id="post-3").count() == 1
+        assert session.query(PostEmotion).filter_by(post_id="post-3").count() == 1

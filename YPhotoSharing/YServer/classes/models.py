@@ -566,6 +566,72 @@ class PhotoEmotion(Base):
     emotion_obj = relationship("Emotion", back_populates="photo_emotions")
 
 
+class PostEmotion(Base):
+    """YSimulator-style generic emotion annotations for photos or comments."""
+
+    __tablename__ = "post_emotions"
+
+    id = Column(String(36), primary_key=True)
+    post_id = Column(String(36), nullable=False, index=True)
+    emotion_id = Column(String(36), ForeignKey("emotions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    emotion = relationship("Emotion")
+
+
+Index("idx_post_emotions_post_id", PostEmotion.post_id)
+Index("idx_post_emotions_emotion_id", PostEmotion.emotion_id)
+
+
+class PostSentiment(Base):
+    """YSimulator-style sentiment annotations for photos or comments."""
+
+    __tablename__ = "post_sentiment"
+
+    id = Column(String(36), primary_key=True)
+    post_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False, index=True)
+    topic_id = Column(String(36), ForeignKey("interests.iid", ondelete="CASCADE"), nullable=True, index=True)
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False, index=True)
+    neg = Column(Float, nullable=True)
+    pos = Column(Float, nullable=True)
+    neu = Column(Float, nullable=True)
+    compound = Column(Float, nullable=True)
+    sentiment_parent = Column(Text, nullable=True)
+    is_post = Column(Integer, default=0)
+    is_comment = Column(Integer, default=0)
+    is_reaction = Column(Integer, default=0)
+
+    user = relationship("User_mgmt")
+    round_obj = relationship("Round")
+    topic = relationship("Interest")
+
+
+Index("idx_post_sentiment_post_id", PostSentiment.post_id)
+Index("idx_post_sentiment_user_id", PostSentiment.user_id)
+Index("idx_post_sentiment_round", PostSentiment.round)
+Index("idx_post_sentiment_topic_id", PostSentiment.topic_id)
+
+
+class PostToxicity(Base):
+    """YSimulator-style toxicity annotations for photos or comments."""
+
+    __tablename__ = "post_toxicity"
+
+    id = Column(String(36), primary_key=True)
+    post_id = Column(String(36), nullable=False, index=True)
+    toxicity = Column(Float, default=0.0, nullable=False)
+    severe_toxicity = Column(Float, default=0.0)
+    identity_attack = Column(Float, default=0.0)
+    insult = Column(Float, default=0.0)
+    profanity = Column(Float, default=0.0)
+    threat = Column(Float, default=0.0)
+    sexually_explicit = Column(Float, default=0.0)
+    flirtation = Column(Float, default=0.0)
+
+
+Index("idx_post_toxicity_post_id", PostToxicity.post_id)
+
+
 # ================================================
 # USER INTERESTS & RECOMMENDATIONS
 # ================================================

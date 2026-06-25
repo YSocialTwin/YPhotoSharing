@@ -18,8 +18,21 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     resolve_photo_topic_ids,
 )
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_comment
+from YPhotoSharing.YClient.text_processing import annotate_content
 
 logger = logging.getLogger(__name__)
+
+
+def _annotation_config(agent_attrs: Optional[dict]) -> dict:
+    attrs = agent_attrs or {}
+    return {
+        "simulation": {
+            "enable_sentiment": bool(attrs.get("enable_sentiment", False)),
+            "enable_emotion_annotation": bool(attrs.get("enable_emotion_annotation", True)),
+            "enable_toxicity": bool(attrs.get("enable_toxicity", False)),
+            "perspective_api_key": attrs.get("perspective_api_key"),
+        }
+    }
 
 
 async def post_comment(
@@ -113,6 +126,8 @@ async def post_comment(
     if not body or not body.strip():
         return None
 
+    annotations = annotate_content(body.strip(), _annotation_config(agent_attrs), llm_handle=llm_service)
+
     try:
         sentiment_score = None
         comment_id = await server.post_comment.remote(
@@ -138,15 +153,8 @@ async def post_comment(
             except Exception as e:
                 logger.warning(f"Could not save memory event for comment: {e}")
 
-        # Stage 5: Sentiment Annotation
-        if agent_attrs and agent_attrs.get("enable_sentiment"):
-            try:
-                sentiment_score = await llm_service.extract_sentiment.remote(body.strip())
-                await server.update_comment_sentiment.remote(comment_id, sentiment_score)
-            except Exception as e:
-                logger.warning(f"Failed to extract sentiment for comment {comment_id}: {e}")
-
         # Stage 9: Evolve user interests
+        topic_ids = []
         try:
             topic_ids = await resolve_photo_topic_ids(
                 server,
@@ -158,6 +166,29 @@ async def post_comment(
                 await server.set_user_interests.remote(user_id, topic_ids, round_id)
         except Exception as e:
             logger.warning(f"Failed to evolve interest in comment: {e}")
+
+        try:
+            annotations["topic_ids"] = topic_ids
+            annotations["topics"] = topic_ids
+            annotations["round"] = round_id
+            if getattr(server, "process_annotations", None) is not None:
+                await server.process_annotations.remote(
+                    comment_id,
+                    user_id,
+                    annotations,
+                    is_comment=True,
+                    parent_post_id=photo_id,
+                    parent_sentiment=photo.get("sentiment_score"),
+                )
+
+            sentiment = annotations.get("sentiment") or {}
+            compound = sentiment.get("compound") if isinstance(sentiment, dict) else None
+            if compound is not None:
+                sentiment_score = compound
+                if getattr(server, "update_comment_sentiment", None) is not None:
+                    await server.update_comment_sentiment.remote(comment_id, compound)
+        except Exception as e:
+            logger.warning(f"Failed to process annotations for comment {comment_id}: {e}")
 
         if (
             stress_reward_enabled

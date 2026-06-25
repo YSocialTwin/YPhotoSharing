@@ -426,6 +426,9 @@ class OrchestratorServer:
     def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
         return self._db.update_comment_sentiment(comment_id, sentiment_score)
 
+    def get_post_sentiment(self, post_id: str) -> Optional[dict]:
+        return self._db.get_post_sentiment(post_id)
+
     def update_user_opinion(
         self,
         user_id: str,

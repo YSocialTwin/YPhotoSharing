@@ -1,27 +1,42 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
-from sqlalchemy import create_engine
+from sqlalchemy import and_, create_engine, func, or_
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import (
     Base,
+    Comment,
+    DirectMessage,
     Emotion,
     Follow,
+    FollowRequest,
     Hashtag,
     Interest,
+    MemoryInteractionEvent,
     OpinionPath,
     Photo,
     PhotoEmotion,
     PhotoHashtag,
     PhotoTopic,
+    PostEmotion,
+    PostSentiment,
+    PostToxicity,
+    Reaction,
+    Recommendation,
+    Reported,
     Round,
+    SavedPhoto,
     StressReward,
+    Story,
+    StoryView,
     UserInterest,
     UserOpinion,
     User_mgmt,
@@ -77,6 +92,7 @@ class DatabaseMiddleware:
         self.db_config = db_config or {"type": "sqlite", "sqlite": {"filename": ":memory:"}}
         self.simulation_config = simulation_config or {}
         self.round_cache: Dict[tuple[int, int], str] = {}
+        self.use_redis = False
 
         self.posts_sentiment: List[Dict[str, Any]] = []
         self.posts_toxicity: List[Dict[str, Any]] = []
@@ -136,6 +152,20 @@ class DatabaseMiddleware:
     def add_post_emotion(self, post_id: str, emotion_id: str) -> bool:
         self.posts_emotions.append({"post_id": post_id, "emotion_id": emotion_id})
         with self.session_scope() as session:
+            existing_post_emotion = (
+                session.query(PostEmotion)
+                .filter(PostEmotion.post_id == post_id, PostEmotion.emotion_id == emotion_id)
+                .first()
+            )
+            if existing_post_emotion is None:
+                session.add(
+                    PostEmotion(
+                        id=str(uuid.uuid4()),
+                        post_id=post_id,
+                        emotion_id=emotion_id,
+                    )
+                )
+
             photo = session.query(Photo).filter(Photo.id == post_id).first()
             if photo is None:
                 return True
@@ -156,11 +186,54 @@ class DatabaseMiddleware:
 
     def add_post_sentiment(self, sentiment_data: Dict[str, Any]) -> bool:
         self.posts_sentiment.append(dict(sentiment_data))
+        try:
+            with self.session_scope() as session:
+                payload = {
+                    "id": str(uuid.uuid4()),
+                    "post_id": sentiment_data["post_id"],
+                    "user_id": sentiment_data["user_id"],
+                    "topic_id": sentiment_data.get("topic_id"),
+                    "round": sentiment_data["round"],
+                    "neg": sentiment_data.get("neg"),
+                    "pos": sentiment_data.get("pos"),
+                    "neu": sentiment_data.get("neu"),
+                    "compound": sentiment_data.get("compound"),
+                    "sentiment_parent": sentiment_data.get("sentiment_parent"),
+                    "is_post": sentiment_data.get("is_post", 0),
+                    "is_comment": sentiment_data.get("is_comment", 0),
+                    "is_reaction": sentiment_data.get("is_reaction", 0),
+                }
+                session.add(PostSentiment(**payload))
+        except Exception:
+            self.logger.debug("Skipping persistent post sentiment write for %s", sentiment_data.get("post_id"))
         return True
+
+    def get_post_sentiment(self, post_id: str) -> Optional[Dict[str, Any]]:
+        with self.session_scope() as session:
+            row = (
+                session.query(PostSentiment)
+                .filter(PostSentiment.post_id == post_id)
+                .order_by(PostSentiment.id.desc())
+                .first()
+            )
+            if row is None:
+                photo = session.query(Photo).filter(Photo.id == post_id).first()
+                if photo is not None and photo.sentiment_score is not None:
+                    return {"compound": photo.sentiment_score}
+                comment = session.query(Comment).filter(Comment.id == post_id).first()
+                if comment is not None and comment.sentiment_score is not None:
+                    return {"compound": comment.sentiment_score}
+                return None
+            return {column.name: getattr(row, column.name) for column in PostSentiment.__table__.columns}
 
     def add_post_toxicity(self, toxicity_data: Dict[str, Any]) -> bool:
         payload = {"id": str(uuid.uuid4()), **dict(toxicity_data)}
         self.posts_toxicity.append(payload)
+        try:
+            with self.session_scope() as session:
+                session.add(PostToxicity(**payload))
+        except Exception:
+            self.logger.debug("Skipping persistent post toxicity write for %s", toxicity_data.get("post_id"))
         return True
 
     def add_or_get_hashtag(self, hashtag_text: str) -> str:
@@ -213,11 +286,62 @@ class DatabaseMiddleware:
         payload.setdefault("password", "secret")
         payload.setdefault("round_actions", 3)
         payload.setdefault("daily_activity_level", 1)
+        allowed_keys = {column.name for column in User_mgmt.__table__.columns}
+        payload = {key: value for key, value in payload.items() if key in allowed_keys}
         with self.session_scope() as session:
             existing = session.query(User_mgmt).filter(User_mgmt.id == user_id).first()
             if existing is None:
                 session.add(User_mgmt(**payload))
         return user_id
+
+    def get_user(self, user_id: str) -> Optional[dict]:
+        with self.session_scope() as session:
+            row = session.query(User_mgmt).filter_by(id=user_id).first()
+            if row is None:
+                return None
+            return {column.name: getattr(row, column.name) for column in User_mgmt.__table__.columns}
+
+    def get_user_by_username(self, username: str) -> Optional[dict]:
+        with self.session_scope() as session:
+            row = session.query(User_mgmt).filter_by(username=username).first()
+            if row is None:
+                return None
+            return {column.name: getattr(row, column.name) for column in User_mgmt.__table__.columns}
+
+    def list_users(self, limit: int = 100, offset: int = 0) -> List[dict]:
+        with self.session_scope() as session:
+            rows = session.query(User_mgmt).limit(limit).offset(offset).all()
+            return [
+                {column.name: getattr(row, column.name) for column in User_mgmt.__table__.columns}
+                for row in rows
+            ]
+
+    def update_satisfaction(self, user_id: str, delta: float) -> float:
+        with self.session_scope() as session:
+            user = session.query(User_mgmt).filter_by(id=user_id).first()
+            if user is None:
+                return 0.0
+            new_score = max(0.0, min(100.0, float(user.satisfaction_score or 100.0) + float(delta)))
+            user.satisfaction_score = new_score
+            if new_score <= 10.0:
+                user.is_churned = True
+            return new_score
+
+    def set_churn_state(self, user_id: str, is_churned: bool) -> bool:
+        with self.session_scope() as session:
+            user = session.query(User_mgmt).filter_by(id=user_id).first()
+            if user is None:
+                return False
+            user.is_churned = bool(is_churned)
+            return True
+
+    def update_last_active_day(self, user_id: str, day: int) -> bool:
+        with self.session_scope() as session:
+            user = session.query(User_mgmt).filter_by(id=user_id).first()
+            if user is None:
+                return False
+            user.last_active_day = int(day)
+            return True
 
     def create_photo(self, photo_data: Dict[str, Any]) -> str:
         payload = dict(photo_data)
@@ -284,6 +408,14 @@ class DatabaseMiddleware:
                 for photo in photos
             ]
 
+    def delete_photo(self, photo_id: str) -> bool:
+        with self.session_scope() as session:
+            photo = session.query(Photo).filter_by(id=photo_id).first()
+            if photo is None:
+                return False
+            photo.deleted_at = datetime.utcnow()
+            return True
+
     def add_or_get_interest(self, interest_name: str) -> str:
         with self.session_scope() as session:
             return self._add_or_get_interest_in_session(session, interest_name)
@@ -316,6 +448,16 @@ class DatabaseMiddleware:
                 written += 1
         return written
 
+    def get_user_interests(self, user_id: str) -> List[str]:
+        with self.session_scope() as session:
+            rows = (
+                session.query(Interest.interest)
+                .join(UserInterest, UserInterest.interest_id == Interest.iid)
+                .filter(UserInterest.user_id == user_id)
+                .all()
+            )
+            return [row[0] for row in rows if row and row[0]]
+
     def add_follow(self, user_id: str, follower_id: str, round_id: str, action: str = "follow") -> str:
         follow_id = str(uuid.uuid4())
         with self.session_scope() as session:
@@ -330,11 +472,135 @@ class DatabaseMiddleware:
             )
         return follow_id
 
+    def remove_follow(self, user_id: str, follower_id: str, round_id: str) -> bool:
+        with self.session_scope() as session:
+            row = session.query(Follow).filter_by(user_id=user_id, follower_id=follower_id).first()
+            if row is None:
+                return False
+            row.action = "unfollow"
+            row.round = round_id
+            return True
+
+    def get_followers(self, user_id: str) -> List[str]:
+        with self.session_scope() as session:
+            rows = session.query(Follow).filter_by(user_id=user_id, action="follow").all()
+            return [row.follower_id for row in rows]
+
+    def get_following(self, user_id: str) -> List[str]:
+        with self.session_scope() as session:
+            rows = session.query(Follow).filter_by(follower_id=user_id, action="follow").all()
+            return [row.user_id for row in rows]
+
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
         emotion_obj = self.get_emotion_by_name(emotion)
         if emotion_obj is None:
             return False
         return self.add_post_emotion(photo_id, emotion_obj["id"])
+
+    def add_reaction(self, user_id: str, photo_id: str, reaction_type: str, round_id: str) -> str:
+        with self.session_scope() as session:
+            existing = session.query(Reaction).filter_by(user_id=user_id, photo_id=photo_id).first()
+            if existing is not None:
+                existing.reaction_type = reaction_type
+                existing.round = round_id
+                return existing.id
+            reaction_id = str(uuid.uuid4())
+            session.add(
+                Reaction(
+                    id=reaction_id,
+                    user_id=user_id,
+                    photo_id=photo_id,
+                    reaction_type=reaction_type,
+                    round=round_id,
+                )
+            )
+            photo = session.query(Photo).filter_by(id=photo_id).first()
+            if photo is not None:
+                photo.num_likes = (photo.num_likes or 0) + 1
+            return reaction_id
+
+    def remove_reaction(self, user_id: str, photo_id: str) -> bool:
+        with self.session_scope() as session:
+            row = session.query(Reaction).filter_by(user_id=user_id, photo_id=photo_id).first()
+            if row is None:
+                return False
+            session.delete(row)
+            photo = session.query(Photo).filter_by(id=photo_id).first()
+            if photo is not None and photo.num_likes:
+                photo.num_likes = max(0, photo.num_likes - 1)
+            return True
+
+    def add_comment(
+        self, user_id: str, photo_id: str, body: str, round_id: str, parent_comment_id: str = None
+    ) -> str:
+        with self.session_scope() as session:
+            comment_id = str(uuid.uuid4())
+            session.add(
+                Comment(
+                    id=comment_id,
+                    user_id=user_id,
+                    photo_id=photo_id,
+                    body=body,
+                    round=round_id,
+                    parent_comment_id=parent_comment_id,
+                )
+            )
+            photo = session.query(Photo).filter_by(id=photo_id).first()
+            if photo is not None:
+                photo.num_comments = (photo.num_comments or 0) + 1
+            return comment_id
+
+    def get_comments(self, photo_id: str, limit: int = 50, offset: int = 0) -> List[dict]:
+        with self.session_scope() as session:
+            rows = (
+                session.query(Comment)
+                .filter_by(photo_id=photo_id, is_deleted=False, parent_comment_id=None)
+                .order_by(Comment.created_at)
+                .limit(limit)
+                .offset(offset)
+                .all()
+            )
+            return [
+                {column.name: getattr(row, column.name) for column in Comment.__table__.columns}
+                for row in rows
+            ]
+
+    def create_story(self, story_data: dict) -> str:
+        with self.session_scope() as session:
+            story_id = story_data.get("id") or str(uuid.uuid4())
+            valid_keys = {column.name for column in Story.__table__.columns}
+            filtered = {k: v for k, v in story_data.items() if k in valid_keys and k != "id"}
+            session.add(Story(id=story_id, **filtered))
+            return story_id
+
+    def record_story_view(self, story_id: str, viewer_id: str) -> bool:
+        with self.session_scope() as session:
+            existing = session.query(StoryView).filter_by(story_id=story_id, viewer_id=viewer_id).first()
+            if existing is not None:
+                return False
+            session.add(StoryView(id=str(uuid.uuid4()), story_id=story_id, viewer_id=viewer_id))
+            story = session.query(Story).filter_by(id=story_id).first()
+            if story is not None:
+                story.view_count = (story.view_count or 0) + 1
+            return True
+
+    def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
+        with self.session_scope() as session:
+            following_rows = session.query(Follow.user_id).filter_by(follower_id=user_id, action="follow").all()
+            following_ids = [row[0] for row in following_rows]
+            if not following_ids:
+                return []
+            rows = (
+                session.query(Story)
+                .filter(Story.user_id.in_(following_ids))
+                .order_by(Story.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {column.name: getattr(row, column.name) for column in Story.__table__.columns}
+                for row in rows
+            ]
 
     def update_photo_sentiment(self, photo_id: str, sentiment_score: float) -> bool:
         with self.session_scope() as session:
@@ -386,6 +652,188 @@ class DatabaseMiddleware:
             counts[interest_id] = counts.get(interest_id, 0) + 1
         return counts
 
+    def add_recommendation(self, user_id: str, photo_ids: List[str], round_id: str) -> str:
+        with self.session_scope() as session:
+            recommendation_id = str(uuid.uuid4())
+            session.add(
+                Recommendation(
+                    id=recommendation_id,
+                    user_id=user_id,
+                    photo_ids=json.dumps(photo_ids),
+                    round=round_id,
+                )
+            )
+            return recommendation_id
+
+    def get_recommendation(self, user_id: str, round_id: str) -> Optional[List[str]]:
+        with self.session_scope() as session:
+            row = (
+                session.query(Recommendation)
+                .filter_by(user_id=user_id, round=round_id)
+                .order_by(Recommendation.id.desc())
+                .first()
+            )
+            if row is None:
+                return None
+            return json.loads(row.photo_ids or "[]")
+
+    def get_or_create_hashtag(self, tag: str) -> str:
+        return self.add_or_get_hashtag(tag)
+
+    def tag_photo(self, photo_id: str, hashtag_id: str) -> None:
+        self.add_post_hashtag(photo_id, hashtag_id)
+
+    def add_memory_event(self, event_data: dict) -> int:
+        with self.session_scope() as session:
+            event = MemoryInteractionEvent(**event_data)
+            session.add(event)
+            session.flush()
+            return int(event.id)
+
+    def get_memory_events(self, run_id: str, agent_user_id: str, limit: int = 100) -> List[dict]:
+        with self.session_scope() as session:
+            rows = (
+                session.query(MemoryInteractionEvent)
+                .filter_by(run_id=run_id, actor_user_id=agent_user_id)
+                .order_by(MemoryInteractionEvent.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {column.name: getattr(row, column.name) for column in MemoryInteractionEvent.__table__.columns}
+                for row in rows
+            ]
+
+    def add_report(
+        self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str
+    ) -> str:
+        with self.session_scope() as session:
+            report_id = str(uuid.uuid4())
+            session.add(
+                Reported(
+                    id=report_id,
+                    reporter_id=reporter_id,
+                    content_id=content_id,
+                    content_type=content_type,
+                    reason=reason,
+                    round_id=round_id,
+                )
+            )
+            return report_id
+
+    def add_follow_request(self, follower_id: str, user_id: str) -> str:
+        with self.session_scope() as session:
+            request_id = str(uuid.uuid4())
+            session.add(FollowRequest(id=request_id, follower_id=follower_id, user_id=user_id))
+            return request_id
+
+    def review_follow_request(self, follower_id: str, user_id: str, action: str, round_id: str) -> bool:
+        with self.session_scope() as session:
+            request = (
+                session.query(FollowRequest)
+                .filter_by(follower_id=follower_id, user_id=user_id, status="pending")
+                .first()
+            )
+            if request is None:
+                return False
+            normalized = str(action or "").lower()
+            request.status = "accepted" if normalized == "accept" else "rejected"
+            if request.status == "accepted":
+                self.add_follow(user_id=user_id, follower_id=follower_id, round_id=round_id)
+            return True
+
+    def get_pending_follow_requests(self, user_id: str) -> List[dict]:
+        with self.session_scope() as session:
+            rows = session.query(FollowRequest).filter_by(user_id=user_id, status="pending").all()
+            return [
+                {column.name: getattr(row, column.name) for column in FollowRequest.__table__.columns}
+                for row in rows
+            ]
+
+    def save_photo(self, user_id: str, photo_id: str) -> str:
+        with self.session_scope() as session:
+            save_id = str(uuid.uuid4())
+            session.add(SavedPhoto(id=save_id, user_id=user_id, photo_id=photo_id))
+            return save_id
+
+    def get_saved_photos(self, user_id: str, limit: int = 30) -> List[dict]:
+        with self.session_scope() as session:
+            rows = session.query(SavedPhoto).filter_by(user_id=user_id).limit(limit).all()
+            return [
+                {column.name: getattr(row, column.name) for column in SavedPhoto.__table__.columns}
+                for row in rows
+            ]
+
+    def send_dm(self, sender_id: str, recipient_id: str, content: str, photo_id: str = None) -> str:
+        with self.session_scope() as session:
+            dm_id = str(uuid.uuid4())
+            session.add(
+                DirectMessage(
+                    id=dm_id,
+                    sender_id=sender_id,
+                    recipient_id=recipient_id,
+                    body=content,
+                    photo_id=photo_id,
+                )
+            )
+            return dm_id
+
+    def get_dms(self, user_id: str, limit: int = 50) -> List[dict]:
+        with self.session_scope() as session:
+            rows = (
+                session.query(DirectMessage)
+                .filter(
+                    or_(
+                        DirectMessage.sender_id == user_id,
+                        DirectMessage.recipient_id == user_id,
+                    )
+                )
+                .order_by(DirectMessage.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {column.name: getattr(row, column.name) for column in DirectMessage.__table__.columns}
+                for row in rows
+            ]
+
+    def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        from YPhotoSharing.YServer.recsys.explore_recsys import ExploreRecsys
+
+        with self.session_scope() as session:
+            followed_subq = session.query(Follow.user_id).filter_by(follower_id=user_id, action="follow").subquery()
+            rows = (
+                session.query(Photo)
+                .filter(
+                    Photo.user_id.notin_(followed_subq),
+                    Photo.user_id != user_id,
+                    Photo.is_removed == 0,
+                )
+                .order_by(Photo.created_at.desc())
+                .limit(100)
+                .all()
+            )
+            candidates = [
+                {column.name: getattr(photo, column.name) for column in Photo.__table__.columns}
+                for photo in rows
+            ]
+            ranker = ExploreRecsys()
+            return ranker.evaluate(user_id, "", session, candidates, limit)
+
+    def get_hashtag_feed(self, hashtag: str, limit: int = 30) -> List[dict]:
+        with self.session_scope() as session:
+            rows = (
+                session.query(Photo)
+                .filter(Photo.caption.like(f"%#{hashtag}%"), Photo.is_removed == 0)
+                .order_by(Photo.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            return [
+                {column.name: getattr(photo, column.name) for column in Photo.__table__.columns}
+                for photo in rows
+            ]
+
     def get_latest_agent_opinion(self, user_id: str, topic_id: str) -> Optional[float]:
         with self.session_scope() as session:
             query = session.query(UserOpinion).filter(UserOpinion.user_id == user_id)
@@ -393,13 +841,21 @@ class DatabaseMiddleware:
             opinion = query.order_by(UserOpinion.round_id.desc()).first()
             return opinion.opinion_score if opinion else None
 
+    def update_comment_sentiment(self, comment_id: str, sentiment_score: float) -> bool:
+        with self.session_scope() as session:
+            comment = session.query(Comment).filter_by(id=comment_id).first()
+            if comment is None:
+                return False
+            comment.sentiment_score = sentiment_score
+            return True
+
     def update_user_opinion(
         self,
         user_id: str,
         topic: str,
-        topic_id: Optional[str],
         opinion_score: float,
         round_id: str,
+        topic_id: Optional[str] = None,
         opinion_label: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> str:
@@ -433,6 +889,32 @@ class DatabaseMiddleware:
                 )
             )
         return opinion_id
+
+    def get_user_opinions(self, user_id: str) -> dict:
+        with self.session_scope() as session:
+            rows = (
+                session.query(UserOpinion)
+                .join(Round, UserOpinion.round_id == Round.id)
+                .filter(UserOpinion.user_id == user_id)
+                .order_by(Round.day.desc(), Round.hour.desc())
+                .all()
+            )
+            result = {}
+            for row in rows:
+                if row.topic not in result:
+                    result[row.topic] = row.opinion_score
+            return result
+
+    def get_opinion_paths(self, user_id: str, topic: Optional[str] = None, limit: int = 100) -> List[dict]:
+        with self.session_scope() as session:
+            query = session.query(OpinionPath).filter_by(user_id=user_id)
+            if topic is not None:
+                query = query.filter_by(topic=topic)
+            rows = query.order_by(OpinionPath.created_at.desc()).limit(limit).all()
+            return [
+                {column.name: getattr(row, column.name) for column in OpinionPath.__table__.columns}
+                for row in rows
+            ]
 
     def record_opinion_path(
         self,

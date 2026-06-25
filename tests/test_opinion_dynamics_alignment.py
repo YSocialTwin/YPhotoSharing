@@ -2,8 +2,10 @@ import tempfile
 from pathlib import Path
 import sys
 import types
+from types import SimpleNamespace
 
 from YPhotoSharing.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
+from YPhotoSharing.YClient.opinion.opinion_calculator import OpinionCalculator
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 from YPhotoSharing.YServer.classes.models import OpinionPath, UserOpinion
 
@@ -96,3 +98,52 @@ def test_discrete_opinion_paths_are_persisted():
         assert opinion_model == "llm_evaluation"
         assert path_transition == "agree"
         assert path_target_label == "Agree"
+
+
+def test_opinion_calculator_llm_path_handles_neighbors_scope_without_name_errors(monkeypatch):
+    monkeypatch.setattr(
+        "YPhotoSharing.YClient.opinion.opinion_calculator.ray.get",
+        lambda value: value,
+    )
+
+    class FakeRemoteMethod:
+        def __init__(self, result):
+            self.result = result
+
+        def remote(self, *args, **kwargs):
+            return self.result
+
+    fake_server = SimpleNamespace(
+        get_neighbors_opinions=FakeRemoteMethod([0.2, 0.8]),
+    )
+    fake_llm = SimpleNamespace(
+        evaluate_opinion_transition=lambda **kwargs: "AGREE",
+    )
+    calculator = OpinionCalculator(
+        opinion_config={
+            "opinion_groups": {
+                "Strongly disagree": [0.0, 0.2],
+                "Disagree": [0.2, 0.4],
+                "Neutral": [0.4, 0.6],
+                "Agree": [0.6, 0.8],
+                "Strongly agree": [0.8, 1.0],
+            }
+        },
+        server=fake_server,
+        llm_manager=fake_llm,
+        client_id="client-1",
+        logger=SimpleNamespace(error=lambda *args, **kwargs: None),
+        get_opinion_group_fn=lambda value: "Neutral",
+    )
+
+    value = calculator._calculate_llm_evaluation(
+        agent_id="user-1",
+        agent_opinion=0.3,
+        author_opinion=0.7,
+        post_content="A caption",
+        topic_id="topic-1",
+        topic_name="travel",
+        params={"evaluation_scope": "neighbors", "cold_start": "neutral"},
+    )
+
+    assert 0.0 <= value <= 1.0

@@ -7,8 +7,22 @@ from YPhotoSharing.YClient.actions.dynamics_helpers import (
     resolve_photo_topic_ids,
 )
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_reply
+from YPhotoSharing.YClient.text_processing import annotate_content
 
 logger = logging.getLogger(__name__)
+
+
+def _annotation_config(agent_attrs: dict = None) -> dict:
+    attrs = agent_attrs or {}
+    return {
+        "simulation": {
+            "enable_sentiment": bool(attrs.get("enable_sentiment", False)),
+            "enable_emotion_annotation": bool(attrs.get("enable_emotion_annotation", True)),
+            "enable_toxicity": bool(attrs.get("enable_toxicity", False)),
+            "perspective_api_key": attrs.get("perspective_api_key"),
+        }
+    }
+
 
 async def reply_comment(
     server,
@@ -50,7 +64,13 @@ async def reply_comment(
         if not photo:
             return False
 
-        await server.post_comment.remote(
+        annotations = annotate_content(
+            reply_body.strip(),
+            _annotation_config(agent_attrs),
+            llm_handle=llm_service,
+        )
+
+        comment_id = await server.post_comment.remote(
             user_id=user_id,
             photo_id=photo_id,
             body=reply_body,
@@ -58,6 +78,7 @@ async def reply_comment(
             parent_comment_id=parent_comment_id
         )
 
+        topic_ids = []
         try:
             topic_ids = await resolve_photo_topic_ids(
                 server,
@@ -69,6 +90,27 @@ async def reply_comment(
                 await server.set_user_interests.remote(user_id, topic_ids, round_id)
         except Exception as e:
             logger.warning(f"Failed to evolve interest in reply_comment: {e}")
+
+        try:
+            annotations["topic_ids"] = topic_ids
+            annotations["topics"] = topic_ids
+            annotations["round"] = round_id
+            if getattr(server, "process_annotations", None) is not None:
+                await server.process_annotations.remote(
+                    comment_id,
+                    user_id,
+                    annotations,
+                    is_comment=True,
+                    parent_post_id=photo_id,
+                    parent_sentiment=photo.get("sentiment_score"),
+                )
+
+            sentiment = annotations.get("sentiment") or {}
+            compound = sentiment.get("compound") if isinstance(sentiment, dict) else None
+            if compound is not None and getattr(server, "update_comment_sentiment", None) is not None:
+                await server.update_comment_sentiment.remote(comment_id, compound)
+        except Exception as e:
+            logger.warning(f"Failed to process annotations for reply {parent_comment_id}: {e}")
 
         if stress_reward_enabled and stress_reward_system and photo.get("user_id") and photo.get("user_id") != user_id:
             try:
