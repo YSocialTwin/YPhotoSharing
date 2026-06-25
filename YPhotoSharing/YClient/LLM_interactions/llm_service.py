@@ -29,8 +29,11 @@ def _build_ollama_url(llm_config: dict) -> str:
     # Strip protocol if accidentally included
     address = address.replace("http://", "").replace("https://", "")
     if ":" in address:
-        return f"http://{address}"
-    return f"http://{address}:{port}"
+        url = f"http://{address}"
+    else:
+        url = f"http://{address}:{port}"
+    return url.replace("/v1", "")
+
 
 
 def _estimate_tokens_from_text(*parts: Any) -> int:
@@ -200,7 +203,7 @@ class LLMService:
         if logging_config.get("enable_prompt_log", False):
             self.prompt_logger = build_structured_file_logger(
                 f"YPhotoSharing.ClientPrompts.{instance_name}",
-                log_dir / f"{instance_name}_prompts.log",
+                log_dir / "llm_prompts.log",
                 level=logging.DEBUG,
                 backup_count=3,
                 max_bytes=50 * 1024 * 1024,
@@ -223,6 +226,49 @@ class LLMService:
                 base_url=v_url,
             )
         self._parser = StrOutputParser()
+        self._setup_logger(logging_config)
+
+    def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
+        """
+        Configure the module-level logger to write to {client_id}_actor.log file.
+        """
+        global logger
+
+        if logging_config is None:
+            logging_config = {}
+
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        if not enable_actor_log:
+            return
+
+        from pathlib import Path
+        log_dir = Path(logging_config.get("log_dir", "."))
+        client_id = logging_config.get("instance_name", "client")
+
+        # Create log directory
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Configure logger
+        logger.setLevel(logging.INFO)
+
+        # Remove existing handlers to avoid duplicates
+        logger.handlers = []
+
+        # Create file handler with rotation
+        from logging.handlers import RotatingFileHandler
+        from YPhotoSharing.common_utils import _compress_rotated_log, _JsonFormatter
+
+        log_file = log_dir / f"{client_id}_actor.log"
+        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+
+        # Add compression for rotated files
+        handler.rotator = _compress_rotated_log
+        handler.namer = lambda name: name + ".gz"
+
+        handler.setFormatter(_JsonFormatter())
+        logger.addHandler(handler)
+
+        logger.info(f"LLMService logger configured to write to {log_file}")
 
     # ------------------------------------------------------------------
     # Internal helpers

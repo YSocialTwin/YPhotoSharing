@@ -79,6 +79,8 @@ def log_server_request(func):
             if request_logger is None:
                 return
 
+            day = getattr(self, "_current_day", None)
+            hour = getattr(self, "_current_hour", None)
             payload = {
                 "request_id": request_id,
                 "client_name": client_name,
@@ -87,8 +89,8 @@ def log_server_request(func):
                 "duration": max(0.0, time.time() - started),
                 "time": datetime.now(timezone.utc).isoformat(),
                 "tid": getattr(self, "current_round_id", None),
-                "day": getattr(self, "_current_day", None),
-                "hour": getattr(self, "_current_hour", None),
+                "day": max(0, day) if day is not None else None,
+                "hour": max(0, hour) if hour is not None else None,
             }
             if error is not None:
                 payload["error"] = error
@@ -162,7 +164,8 @@ class OrchestratorServer:
         self.follow_recsys = FollowRecsys(self._db)
         self.moderation_service = ModerationService(self._db)
         self.analytics_service = AnalyticsService(self._db)
-        self.media_service = MediaService()
+        media_storage_dir = self.config_path / "media"
+        self.media_service = MediaService(storage_dir=str(media_storage_dir))
         self.social_action_repository = SocialActionRepository(self._db)
         self.social_action_service = SocialActionService(
             repository=self.social_action_repository,

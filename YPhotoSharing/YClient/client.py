@@ -9,10 +9,13 @@ through the server's remote API.
 from __future__ import annotations
 
 import asyncio
+import datetime
+import json
 import logging
 import random
 import time
 import uuid
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -70,6 +73,33 @@ def _build_llm_service(
     )
 
 
+class ActionFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        msg = record.getMessage()
+        stripped = msg.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            try:
+                json.loads(stripped)
+                return stripped
+            except json.JSONDecodeError:
+                pass
+        
+        log_data = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "message": msg,
+        }
+        if hasattr(record, "extra_data"):
+            ext = getattr(record, "extra_data")
+            if isinstance(ext, dict):
+                log_data.update(ext)
+        elif hasattr(record, "extra"):
+            ext = getattr(record, "extra")
+            if isinstance(ext, dict):
+                log_data.update(ext)
+        return json.dumps(log_data)
+
+
 @ray.remote
 class SimulationClient:
     """Ray remote actor representing one simulation client process."""
@@ -110,11 +140,27 @@ class SimulationClient:
         )
         self.logger = logger
         self.action_logger = None
-        if logging_config.get("enable_action_log", False):
-            self.action_logger = build_structured_file_logger(
-                f"YPhotoSharing.ClientActions.{self.client_id}",
-                self.config_path / "logs" / f"{self.client_id}_actions.log",
+
+        enable_client_log = logging_config.get("enable_client_log", True)
+        if enable_client_log:
+            action_log_file = self.config_path / "logs" / f"{self.client_id}_client.log"
+            action_handler = RotatingFileHandler(
+                action_log_file, maxBytes=10 * 1024 * 1024, backupCount=5
             )
+
+            from YPhotoSharing.common_utils import _compress_rotated_log
+            action_handler.rotator = _compress_rotated_log
+            action_handler.namer = lambda name: name + ".gz"
+
+            action_handler.setFormatter(ActionFormatter())
+            self.action_logger = logging.getLogger(f"YPhotoSharing.Client.{self.client_id}.Actions")
+            self.action_logger.setLevel(logging.INFO)
+            self.action_logger.handlers = []
+            self.action_logger.propagate = False
+            self.action_logger.addHandler(action_handler)
+
+        self.hourly_actions = []
+        self.daily_actions = []
 
         for attempt in range(10):
             try:
@@ -316,7 +362,42 @@ class SimulationClient:
         round_id = await self.server.get_or_create_round.remote(day, hour)
         self._round_count += 1
 
+        start_time = time.time()
         all_results = await self._run_agents_async(day, hour, round_id)
+        execution_time_seconds = time.time() - start_time
+
+        # Extract active agents to match results
+        active_agents = self.round_planner.select_active_agents(self._agents, hour)
+
+        # Extract and log individual actions
+        flat_actions = []
+        for agent, agent_results in zip(active_agents, all_results):
+            if isinstance(agent_results, list):
+                for res in agent_results:
+                    if isinstance(res, dict):
+                        action_name = res.get("action")
+                        if action_name and action_name != "churned":
+                            flat_actions.append((agent.username, action_name))
+
+        total_actions = len(flat_actions)
+        per_action_time = execution_time_seconds / total_actions if total_actions > 0 else 0.0
+
+        for username, action_name in flat_actions:
+            self._log_action(
+                agent_name=username,
+                method_name=action_name.lower(),
+                execution_time_seconds=per_action_time,
+                success=True,
+                day=day,
+                slot=hour,
+            )
+
+        # Log hourly summary
+        self._log_hourly_summary(day, hour)
+
+        # Log daily summary if last hour of the day
+        if hour == 23:
+            self._log_daily_summary(day)
 
         if hour == 23 and self.lifecycle_manager is not None:
             try:
@@ -327,15 +408,13 @@ class SimulationClient:
                 )
                 if self.action_logger:
                     self.action_logger.info(
-                        "Client lifecycle completed",
-                        extra={
-                            "extra_data": {
-                                "client_id": self.client_id,
-                                "day": day,
-                                "round_id": round_id,
-                                **lifecycle_stats,
-                            }
-                        },
+                        json.dumps({
+                            "event": "client_lifecycle_completed",
+                            "client_id": self.client_id,
+                            "day": day,
+                            "round_id": round_id,
+                            **lifecycle_stats,
+                        })
                     )
             except Exception as exc:
                 logger.warning(f"Lifecycle evaluation failed for day {day}: {exc}")
@@ -346,22 +425,20 @@ class SimulationClient:
             "day": day,
             "hour": hour,
             "agents": len(self._agents),
-            "actions": sum(len(result) for result in all_results),
+            "actions": total_actions,
         }
         logger.info(f"Round {day}/{hour} complete: {summary['actions']} actions")
         if self.action_logger:
             self.action_logger.info(
-                "Client round completed",
-                extra={
-                    "extra_data": {
-                        "client_id": self.client_id,
-                        "round": self._round_count,
-                        "day": day,
-                        "hour": hour,
-                        "actions": summary["actions"],
-                        "agents": len(self._agents),
-                    }
-                },
+                json.dumps({
+                    "event": "client_round_completed",
+                    "client_id": self.client_id,
+                    "round": self._round_count,
+                    "day": day,
+                    "hour": hour,
+                    "actions": summary["actions"],
+                    "agents": len(self._agents),
+                })
             )
 
         await self.server.ready_for_next_round.remote(self.client_id)
@@ -371,6 +448,97 @@ class SimulationClient:
         active_agents = self.round_planner.select_active_agents(self._agents, hour)
         tasks = [agent.run_round(day, hour, round_id) for agent in active_agents]
         return await asyncio.gather(*tasks, return_exceptions=False)
+
+    def _log_action(
+        self,
+        agent_name: str,
+        method_name: str,
+        execution_time_seconds: float,
+        success: bool,
+        day: int,
+        slot: int,
+    ):
+        """Log an individual agent action in the standardized format."""
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = {
+            "time": timestamp,
+            "agent_name": agent_name,
+            "method_name": method_name,
+            "execution_time_seconds": round(execution_time_seconds, 4),
+            "success": success,
+        }
+        if self.action_logger:
+            self.action_logger.info(json.dumps(log_entry))
+
+        # Track for hourly/daily summaries
+        action_info = {
+            "method_name": method_name,
+            "execution_time_seconds": execution_time_seconds,
+            "success": success,
+            "day": day,
+            "slot": slot,
+        }
+        self.hourly_actions.append(action_info)
+        self.daily_actions.append(action_info)
+
+    def _log_hourly_summary(self, day: int, slot: int):
+        """Log hourly summary with execution time statistics."""
+        total_time = sum(a["execution_time_seconds"] for a in self.hourly_actions)
+        total_actions = len(self.hourly_actions)
+        successful_actions = sum(1 for a in self.hourly_actions if a["success"])
+
+        # Count actions by method
+        method_counts = {}
+        for action in self.hourly_actions:
+            method = action["method_name"]
+            method_counts[method] = method_counts.get(method, 0) + 1
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        summary = {
+            "time": timestamp,
+            "summary_type": "hourly",
+            "day": day,
+            "slot": slot,
+            "total_actions": total_actions,
+            "successful_actions": successful_actions,
+            "total_execution_time_seconds": round(total_time, 4),
+            "average_execution_time_seconds": round(
+                total_time / total_actions if total_actions > 0 else 0, 4
+            ),
+            "actions_by_method": method_counts,
+        }
+        if self.action_logger:
+            self.action_logger.info(json.dumps(summary))
+        self.hourly_actions = []
+
+    def _log_daily_summary(self, day: int):
+        """Log daily summary with execution time statistics."""
+        total_time = sum(a["execution_time_seconds"] for a in self.daily_actions)
+        total_actions = len(self.daily_actions)
+        successful_actions = sum(1 for a in self.daily_actions if a["success"])
+
+        # Count actions by method
+        method_counts = {}
+        for action in self.daily_actions:
+            method = action["method_name"]
+            method_counts[method] = method_counts.get(method, 0) + 1
+
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        summary = {
+            "time": timestamp,
+            "summary_type": "daily",
+            "day": day,
+            "total_actions": total_actions,
+            "successful_actions": successful_actions,
+            "total_execution_time_seconds": round(total_time, 4),
+            "average_execution_time_seconds": round(
+                total_time / total_actions if total_actions > 0 else 0, 4
+            ),
+            "actions_by_method": method_counts,
+        }
+        if self.action_logger:
+            self.action_logger.info(json.dumps(summary))
+        self.daily_actions = []
 
     def get_status(self) -> dict:
         return {

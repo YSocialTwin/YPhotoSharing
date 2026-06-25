@@ -116,6 +116,21 @@ def normalize_agent_config(user_config: dict, simulation_config: Optional[dict])
     enriched.setdefault("stubborn_topics", [])
     enriched.setdefault("custom_features", {})
 
+    interests = enriched.get("interests", [])
+    if isinstance(interests, list):
+        if len(interests) == 2 and isinstance(interests[0], list) and isinstance(interests[1], (int, float)):
+            enriched["interests"] = list(interests[0])
+        else:
+            normalized_interests = []
+            for item in interests:
+                if isinstance(item, list):
+                    normalized_interests.extend(item)
+                elif isinstance(item, str):
+                    normalized_interests.append(item)
+            enriched["interests"] = normalized_interests
+    else:
+        enriched["interests"] = []
+
     user_type = str(enriched.get("user_type", "")).strip().lower()
     if user_type in {"llm", "rule_based", "rule-based", "rule"}:
         enriched["llm"] = user_type == "llm"

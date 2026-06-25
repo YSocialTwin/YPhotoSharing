@@ -156,7 +156,50 @@ class VLLMService:
                 backend="vllm",
             )
 
+        self._setup_logger(logging_config)
         logger.info(f"VLLMService initialised with model={self.model_name}")
+
+    def _setup_logger(self, logging_config: Optional[Dict[str, Any]] = None):
+        """
+        Configure the module-level logger to write to {client_id}_actor.log file.
+        """
+        global logger
+
+        if logging_config is None:
+            logging_config = {}
+
+        enable_actor_log = logging_config.get("enable_actor_log", True)
+        if not enable_actor_log:
+            return
+
+        from pathlib import Path
+        log_dir = Path(logging_config.get("log_dir", "."))
+        client_id = logging_config.get("instance_name", "client")
+
+        # Create log directory
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Configure logger
+        logger.setLevel(logging.INFO)
+
+        # Remove existing handlers to avoid duplicates
+        logger.handlers = []
+
+        # Create file handler with rotation
+        from logging.handlers import RotatingFileHandler
+        from YPhotoSharing.common_utils import _compress_rotated_log, _JsonFormatter
+
+        log_file = log_dir / f"{client_id}_actor.log"
+        handler = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=5)  # 10MB
+
+        # Add compression for rotated files
+        handler.rotator = _compress_rotated_log
+        handler.namer = lambda name: name + ".gz"
+
+        handler.setFormatter(_JsonFormatter())
+        logger.addHandler(handler)
+
+        logger.info(f"VLLMService logger configured to write to {log_file}")
 
     # ------------------------------------------------------------------
     # Batch helpers

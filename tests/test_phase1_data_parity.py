@@ -94,6 +94,29 @@ def test_legacy_list_population_is_normalized_to_agents_document():
     assert population["generation_config"]["num_additional_agents"] == 0
 
 
+def test_nested_interests_normalization():
+    record1 = normalize_agent_config(
+        {
+            "id": "user-1",
+            "username": "alice",
+            "interests": [["gym", "chess"], 2],
+        },
+        simulation_config={},
+    )
+    assert record1["interests"] == ["gym", "chess"]
+
+    record2 = normalize_agent_config(
+        {
+            "id": "user-2",
+            "username": "bob",
+            "interests": ["gym", "chess"],
+        },
+        simulation_config={},
+    )
+    assert record2["interests"] == ["gym", "chess"]
+
+
+
 def test_persona_context_uses_profile_and_photo_sharing_details():
     persona = _format_persona_context(
         {
