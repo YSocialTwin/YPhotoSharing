@@ -77,4 +77,4 @@ def test_database_middleware_initializes_goemotions():
     db.initialize_emotions_table()
 
     assert db.get_emotion_by_name("joy") is not None
-    assert db.get_emotion_by_name("neutral") is not None
+    assert db.get_emotion_by_name("trust") is not None

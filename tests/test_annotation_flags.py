@@ -1,7 +1,15 @@
 from types import SimpleNamespace
 
 from YPhotoSharing.YClient.annotation import normalize_annotation_flags
-from YPhotoSharing.YClient.text_support.text_annotator import annotate_text, prepare_sentiment_data, prepare_toxicity_data
+from YPhotoSharing.YClient.text_support.text_annotator import (
+    EMOTION_LIST,
+    EMOTION_SYSTEM_TEMPLATE,
+    EMOTION_USER_TEMPLATE,
+    annotate_text,
+    build_emotion_prompt,
+    prepare_sentiment_data,
+    prepare_toxicity_data,
+)
 
 
 def test_annotation_flags_are_parsed_from_simulation_block():
@@ -73,3 +81,13 @@ def test_prepare_annotation_rows_match_expected_schema():
     assert len(sentiment) == 2
     assert sentiment[0]["is_post"] == 1
     assert toxicity["toxicity"] == 0.5
+
+
+def test_emotion_prompt_matches_ysimulator():
+    payload = build_emotion_prompt("Sample text")
+
+    assert payload["system_template"] == EMOTION_SYSTEM_TEMPLATE
+    assert payload["user_template"] == EMOTION_USER_TEMPLATE
+    assert payload["emotion_list"] == EMOTION_LIST
+    assert "trust" in payload["emotion_list"]
+    assert "neutral" not in payload["emotion_list"]

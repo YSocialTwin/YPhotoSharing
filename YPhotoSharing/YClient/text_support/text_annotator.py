@@ -7,6 +7,21 @@ import ray
 from .annotations import toxicity, vader_sentiment
 from .cleaning import extract_components
 
+EMOTION_SYSTEM_TEMPLATE = (
+    "You are an emotion classification assistant. Identify which emotions from "
+    "the GoEmotions taxonomy the given text elicits."
+)
+EMOTION_USER_TEMPLATE = (
+    'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\n'
+    'Text: "{text}"\n\nReturn emotions as comma-separated list:'
+)
+EMOTION_LIST = (
+    "admiration, amusement, anger, annoyance, approval, caring, confusion, "
+    "curiosity, desire, disappointment, disapproval, disgust, embarrassment, "
+    "excitement, fear, gratitude, grief, joy, love, nervousness, optimism, "
+    "pride, realization, relief, remorse, sadness, surprise, trust"
+)
+
 
 def _normalize_emotions(result) -> List[str]:
     if result is None:
@@ -18,6 +33,16 @@ def _normalize_emotions(result) -> List[str]:
         parts = [part.strip().strip("'\"") for part in cleaned.split(",")]
         return [part for part in parts if part]
     return []
+
+
+def build_emotion_prompt(text: str) -> Dict[str, str]:
+    """Return the YSimulator-compatible emotion extraction prompt payload."""
+    return {
+        "system_template": EMOTION_SYSTEM_TEMPLATE,
+        "user_template": EMOTION_USER_TEMPLATE,
+        "emotion_list": EMOTION_LIST,
+        "text": text or "",
+    }
 
 
 def annotate_text(

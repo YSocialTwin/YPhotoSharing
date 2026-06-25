@@ -33,7 +33,7 @@ GOEMOTIONS = [
     "remorse",
     "sadness",
     "surprise",
-    "neutral",
+    "trust",
 ]
 
 
@@ -82,4 +82,3 @@ class DatabaseMiddleware:
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
         self.post_hashtags.append({"post_id": post_id, "hashtag_id": hashtag_id})
         return True
-
