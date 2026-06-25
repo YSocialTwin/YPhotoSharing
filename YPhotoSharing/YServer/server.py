@@ -1,10 +1,65 @@
 from __future__ import annotations
 
+import functools
+import inspect
+import json
+import time
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from .annotation_processor import AnnotationProcessor
 from .classes.db_middleware import DatabaseMiddleware
+
+
+def log_server_request(func):
+    """Log a server request in the same JSON-line shape used by YSimulator tests."""
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        started = time.time()
+        status_code = 200
+        result = None
+        error_message = None
+
+        try:
+            result = func(self, *args, **kwargs)
+            return result
+        except Exception as exc:
+            status_code = 500
+            error_message = str(exc)
+            raise
+        finally:
+            request_logger = getattr(self, "request_logger", None)
+            if request_logger is None:
+                return
+
+            duration = max(0.0, time.time() - started)
+            client_name = kwargs.get("client_id")
+            if client_name is None and args:
+                signature = inspect.signature(func)
+                param_names = [p.name for p in signature.parameters.values() if p.name != "self"]
+                if param_names:
+                    bound = dict(zip(param_names, args))
+                    client_name = bound.get("client_id")
+
+            payload = {
+                "request_id": str(uuid.uuid4()),
+                "time": datetime.now(timezone.utc).isoformat(),
+                "path": func.__name__,
+                "client_name": client_name,
+                "status_code": status_code,
+                "tid": getattr(self, "current_round_id", None),
+                "day": getattr(self, "_current_day", None),
+                "hour": getattr(self, "_current_hour", None),
+                "duration": duration,
+            }
+            if error_message is not None:
+                payload["error"] = error_message
+            request_logger.info(json.dumps(payload))
+
+    return wrapper
 
 
 @dataclass
@@ -45,4 +100,3 @@ class OrchestratorServer:
             parent_post_id=parent_post_id,
             parent_sentiment=parent_sentiment,
         )
-
