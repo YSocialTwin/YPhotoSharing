@@ -36,3 +36,7 @@ torch>=2.0.0
 
 # --- Optional: vLLM batched inference (requires CUDA) ---
 # vllm>=0.4.0
+
+detoxify
+nltk>=3.8.0
+perspective
