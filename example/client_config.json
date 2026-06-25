@@ -92,7 +92,7 @@
     "port": 11434,
     "model": "minicpm-v"
   },
-  "logging": {
+    "logging": {
     "enable_console_log": true,
     "enable_execution_log": true,
     "enable_action_log": false,

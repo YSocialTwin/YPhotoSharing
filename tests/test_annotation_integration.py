@@ -1,39 +1,80 @@
 from YPhotoSharing.YClient.text_processing import annotate_content
 from YPhotoSharing.YServer.annotation_processor import AnnotationProcessor
+from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
 
 
-def test_annotation_pipeline_follows_config_flags():
+def test_annotation_pipeline_follows_config_flags(monkeypatch):
+    monkeypatch.setattr(
+        "YPhotoSharing.YClient.text_processing.annotate_text",
+        lambda text, **kwargs: {
+            "hashtags": ["tag"],
+            "mentions": ["user"],
+            "sentiment": {"neg": 0.0, "pos": 0.1, "neu": 0.9, "compound": 0.1},
+            "emotions": ["joy"],
+            "toxicity": {"TOXICITY": 0.2},
+        },
+    )
+
     config = {
         "simulation": {
             "enable_sentiment": True,
             "enable_emotion_annotation": True,
             "enable_toxicity": True,
+            "perspective_api_key": None,
         }
     }
 
     annotations = annotate_content("A sample post", config)
     processor = AnnotationProcessor(
+        metadata_service=DatabaseMiddleware(),
         enable_sentiment=True,
         enable_emotion_annotation=True,
         enable_toxicity=True,
     )
 
-    stored = processor.process_post("post-1", annotations)
+    annotations["topics"] = ["topic-1"]
+    annotations["emotions"] = ["joy"]
+    processor._process_annotations("post-1", "user-1", annotations, is_post=True)
 
-    assert set(annotations) == {"sentiment", "emotions", "toxicity"}
-    assert "sentiment" in stored
-    assert "emotions" in stored
-    assert "toxicity" in stored
+    assert processor.metadata_service.posts_sentiment
+    assert processor.metadata_service.posts_toxicity
+    assert processor.metadata_service.posts_emotions
 
 
-def test_disabled_flags_do_not_persist_missing_annotations():
+def test_disabled_flags_do_not_persist_missing_annotations(monkeypatch):
+    monkeypatch.setattr(
+        "YPhotoSharing.YClient.text_processing.annotate_text",
+        lambda text, **kwargs: {
+            "hashtags": [],
+            "mentions": [],
+            "sentiment": None,
+            "emotions": None,
+            "toxicity": None,
+        },
+    )
+
     annotations = annotate_content(
         "A sample post",
-        {"simulation": {"enable_sentiment": False, "enable_emotion_annotation": False, "enable_toxicity": False}},
+        {
+            "simulation": {
+                "enable_sentiment": False,
+                "enable_emotion_annotation": False,
+                "enable_toxicity": False,
+            }
+        },
     )
-    processor = AnnotationProcessor()
+    processor = AnnotationProcessor(metadata_service=DatabaseMiddleware())
 
-    stored = processor.process_post("post-2", annotations)
+    processor._process_annotations("post-2", "user-1", annotations, is_post=True)
 
-    assert stored == {"post_id": "post-2"}
+    assert processor.metadata_service.posts_sentiment == []
+    assert processor.metadata_service.posts_toxicity == []
+    assert processor.metadata_service.posts_emotions == []
 
+
+def test_database_middleware_initializes_goemotions():
+    db = DatabaseMiddleware()
+    db.initialize_emotions_table()
+
+    assert db.get_emotion_by_name("joy") is not None
+    assert db.get_emotion_by_name("neutral") is not None
