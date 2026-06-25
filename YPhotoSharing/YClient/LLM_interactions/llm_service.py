@@ -410,7 +410,43 @@ class LLMService:
 
     def extract_emotions(self, text: str) -> List[str]:
         """Extract GoEmotions labels from text using the YSimulator-compatible prompt."""
-        result = self._render("extract_emotions", text=text)
+        cfg = self.prompts_config.get("extract_emotions", {})
+        system_template = cfg.get(
+            "system_template",
+            "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+        )
+        user_template = cfg.get(
+            "user_template",
+            'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+        )
+        emotion_list_text = (
+            "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, "
+            "desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, "
+            "gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, "
+            "remorse, sadness, surprise, trust"
+        )
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_template),
+            ("human", user_template),
+        ])
+        chain = prompt | self.llm | self._parser
+        try:
+            result = chain.invoke({"text": text, "emotion_list": emotion_list_text}).strip()
+            self._log_prompt(
+                "extract_emotions",
+                {"text": text, "emotion_list": emotion_list_text},
+                result,
+                backend="text",
+            )
+            if self.usage_tracker:
+                self.usage_tracker.record_call(
+                    "extract_emotions",
+                    input_tokens=_estimate_tokens_from_text(text, emotion_list_text),
+                    output_tokens=_estimate_tokens_from_text(result),
+                )
+        except Exception as exc:
+            logger.warning(f"LLM call failed (extract_emotions): {exc}")
+            return []
         emotion_list = {
             "admiration",
             "amusement",

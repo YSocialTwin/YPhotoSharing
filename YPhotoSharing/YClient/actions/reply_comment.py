@@ -24,6 +24,16 @@ def _annotation_config(agent_attrs: dict = None) -> dict:
     }
 
 
+async def _build_annotations(body: str, agent_attrs: dict, llm_service) -> dict:
+    annotations = annotate_content(body, _annotation_config(agent_attrs), llm_handle=None)
+    if (agent_attrs or {}).get("enable_emotion_annotation", True) and llm_service is not None:
+        try:
+            annotations["emotions"] = await llm_service.extract_emotions.remote(body)
+        except Exception:
+            annotations["emotions"] = []
+    return annotations
+
+
 async def reply_comment(
     server,
     llm_service,
@@ -64,11 +74,7 @@ async def reply_comment(
         if not photo:
             return False
 
-        annotations = annotate_content(
-            reply_body.strip(),
-            _annotation_config(agent_attrs),
-            llm_handle=llm_service,
-        )
+        annotations = await _build_annotations(reply_body.strip(), agent_attrs, llm_service)
 
         comment_id = await server.post_comment.remote(
             user_id=user_id,

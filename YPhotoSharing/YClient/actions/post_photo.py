@@ -28,6 +28,16 @@ def _annotation_config(agent_attrs: Optional[Dict[str, Any]]) -> Dict[str, Dict[
     }
 
 
+async def _build_annotations(caption: str, agent_attrs: Optional[Dict[str, Any]], llm_service) -> Dict[str, Any]:
+    annotations = annotate_content(caption, _annotation_config(agent_attrs), llm_handle=None)
+    if (agent_attrs or {}).get("enable_emotion_annotation", True) and llm_service is not None:
+        try:
+            annotations["emotions"] = await llm_service.extract_emotions.remote(caption)
+        except Exception:
+            annotations["emotions"] = []
+    return annotations
+
+
 async def post_photo(
     server,
     llm_service,
@@ -130,7 +140,7 @@ async def post_photo(
         "topic": topic,
         "topics": [topic],
     }
-    annotations = annotate_content(caption, _annotation_config(agent_attrs), llm_handle=llm_service)
+    annotations = await _build_annotations(caption, agent_attrs, llm_service)
 
     try:
         photo_id = await server.post_photo.remote(photo_data)

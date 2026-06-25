@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from YPhotoSharing.YClient.annotation import normalize_annotation_flags
+from YPhotoSharing.YClient.LLM_interactions.llm_service import LLMService
 from YPhotoSharing.YClient.text_support.text_annotator import (
     EMOTION_LIST,
     EMOTION_SYSTEM_TEMPLATE,
@@ -91,3 +92,52 @@ def test_emotion_prompt_matches_ysimulator():
     assert payload["emotion_list"] == EMOTION_LIST
     assert "trust" in payload["emotion_list"]
     assert "neutral" not in payload["emotion_list"]
+
+
+def test_standard_llm_extract_emotions_uses_text_and_emotion_list_variables(monkeypatch):
+    service_cls = LLMService.__ray_metadata__.modified_class
+    service = object.__new__(service_cls)
+    service.prompts_config = {
+        "extract_emotions": {
+            "system_template": "system",
+            "user_template": "{text} / {emotion_list}",
+        }
+    }
+    service._parser = object()
+    service.llm = object()
+    service.prompt_logger = None
+    service.usage_tracker = None
+
+    class _FakeChain:
+        def __init__(self):
+            self.payload = None
+
+        def invoke(self, payload):
+            self.payload = payload
+            return "joy, trust"
+
+    fake_chain = _FakeChain()
+
+    class _FakePrompt:
+        def __or__(self, other):
+            return self
+
+    class _FakePromptTemplate:
+        @staticmethod
+        def from_messages(messages):
+            return _FakePrompt()
+
+    class _FakePromptWithLlm:
+        def __or__(self, other):
+            return fake_chain
+
+    monkeypatch.setattr(
+        "YPhotoSharing.YClient.LLM_interactions.llm_service.ChatPromptTemplate",
+        _FakePromptTemplate,
+    )
+    _FakePrompt.__or__ = lambda self, other: _FakePromptWithLlm()
+    emotions = service.extract_emotions("Sample text")
+
+    assert emotions == ["joy", "trust"]
+    assert fake_chain.payload["text"] == "Sample text"
+    assert "trust" in fake_chain.payload["emotion_list"]

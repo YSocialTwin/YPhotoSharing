@@ -77,6 +77,30 @@ class OpinionManager:
 
         self.cache = OpinionCache(logger=logger)
 
+    @staticmethod
+    def _profile_id(profile: Any) -> Optional[str]:
+        if profile is None:
+            return None
+        return getattr(profile, "id", None) or getattr(profile, "user_id", None) or (
+            profile.get("id") if isinstance(profile, dict) else None
+        )
+
+    @staticmethod
+    def _profile_attr(profile: Any, name: str, default: Any = None) -> Any:
+        if profile is None:
+            return default
+        if isinstance(profile, dict):
+            return profile.get(name, default)
+        if hasattr(profile, name):
+            return getattr(profile, name)
+        user_data = getattr(profile, "user_data", None)
+        if isinstance(user_data, dict):
+            return user_data.get(name, default)
+        return default
+
+    def _find_agent_profile(self, agent_id: str) -> Any:
+        return next((profile for profile in self.agent_profiles if self._profile_id(profile) == agent_id), None)
+
     def is_enabled(self) -> bool:
         """
         Check if opinion dynamics is enabled in the simulation configuration.
@@ -140,8 +164,9 @@ class OpinionManager:
                 return {"topics": [], "opinions": {}, "opinion_values": {}}
 
             # Get agent profile
-            agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
-            if not agent_profile or not agent_profile.opinions:
+            agent_profile = self._find_agent_profile(agent_id)
+            profile_opinions = self._profile_attr(agent_profile, "opinions", {})
+            if not agent_profile or not profile_opinions:
                 return {"topics": [], "opinions": {}, "opinion_values": {}}
 
             # Get post topics
@@ -165,8 +190,8 @@ class OpinionManager:
                     continue
 
                 # Get agent's opinion on this topic
-                if topic_name in agent_profile.opinions:
-                    opinion_value = agent_profile.opinions[topic_name]
+                if topic_name in profile_opinions:
+                    opinion_value = profile_opinions[topic_name]
                     opinion_label = self.map_opinion_to_group(opinion_value)
 
                     topics.append(topic_name)
@@ -224,7 +249,7 @@ class OpinionManager:
             float: Opinion value in [0, 1] range
         """
         # Get agent profile to determine if LLM or rule-based
-        agent_profile = next((a for a in self.agent_profiles if a.id == agent_id), None)
+        agent_profile = self._find_agent_profile(agent_id)
 
         return self.inferencer.infer_opinion(
             agent_profile=agent_profile,

@@ -101,9 +101,8 @@ class Agent:
             return [{"action": "churned", "status": "inactive"}]
 
         # Sync user_data from server to get updated stats
-        import ray
         try:
-            updated_user = ray.get(self.server.get_user.remote(self.user_id))
+            updated_user = await self.server.get_user.remote(self.user_id)
             if updated_user:
                 self.user_data = updated_user
         except Exception as e:
@@ -239,9 +238,8 @@ class Agent:
     async def _update_satisfaction(self):
         """Update the agent's satisfaction score algorithmically based on simulation state."""
         # Simple heuristic: if the agent hasn't received new followers, lower satisfaction.
-        import ray
         try:
-            stats = ray.get(self.server.get_user.remote(self.user_id))
+            stats = await self.server.get_user.remote(self.user_id)
             if not stats: return
             
             followers_count = len(stats.get("follower_ids", []))

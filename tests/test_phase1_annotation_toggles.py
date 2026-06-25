@@ -16,16 +16,6 @@ class _RemoteMethod:
         return self.result
 
 
-class _SyncRemoteMethod:
-    def __init__(self, result):
-        self.result = result
-        self.calls = []
-
-    def remote(self, *args, **kwargs):
-        self.calls.append((args, kwargs))
-        return self.result
-
-
 def test_normalize_agent_config_exposes_annotation_flags():
     config = normalize_agent_config(
         {"id": "user-1"},
@@ -138,7 +128,7 @@ def test_post_photo_routes_annotations_through_server_pipeline(monkeypatch):
     class FakeLlm:
         def __init__(self):
             self.generate_caption = _RemoteMethod("A calm scene #travel")
-            self.extract_emotions = _SyncRemoteMethod(["joy"])
+            self.extract_emotions = _RemoteMethod(["joy"])
 
     server = FakeServer()
     llm = FakeLlm()
@@ -192,7 +182,7 @@ def test_post_comment_routes_annotations_through_server_pipeline(monkeypatch):
     class FakeLlm:
         def __init__(self):
             self.generate_comment = _RemoteMethod("I do not like this")
-            self.extract_emotions = _SyncRemoteMethod(["annoyance"])
+            self.extract_emotions = _RemoteMethod(["annoyance"])
 
     server = FakeServer()
     llm = FakeLlm()

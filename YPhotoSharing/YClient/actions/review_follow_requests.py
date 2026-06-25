@@ -24,10 +24,9 @@ async def review_follow_requests(
         if not pending:
             return True
             
-        import ray
         for req in pending:
             # Get requester's profile
-            requester = ray.get(server.get_user.remote(req["follower_id"]))
+            requester = await server.get_user.remote(req["follower_id"])
             if not requester:
                 action = "rejected"
             elif is_llm_agent:
@@ -53,7 +52,7 @@ async def review_follow_requests(
             
             # Stage 7: Followback
             if action == "accepted":
-                user_data = ray.get(server.get_user.remote(user_id))
+                user_data = await server.get_user.remote(user_id)
                 prob_fb = user_data.get("probability_of_follow_back", 0.0) if user_data else 0.0
                 if prob_fb > 0:
                     if random.random() < prob_fb:

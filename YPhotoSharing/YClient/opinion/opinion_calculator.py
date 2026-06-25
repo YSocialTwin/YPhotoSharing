@@ -52,6 +52,30 @@ class OpinionCalculator:
         self.get_opinion_group_fn = get_opinion_group_fn
         self.last_update_events: Dict[str, dict] = {}
 
+    @staticmethod
+    def _profile_id(profile: Any) -> Optional[str]:
+        if profile is None:
+            return None
+        return getattr(profile, "id", None) or getattr(profile, "user_id", None) or (
+            profile.get("id") if isinstance(profile, dict) else None
+        )
+
+    @staticmethod
+    def _profile_attr(profile: Any, name: str, default: Any = None) -> Any:
+        if profile is None:
+            return default
+        if isinstance(profile, dict):
+            return profile.get(name, default)
+        if hasattr(profile, name):
+            return getattr(profile, name)
+        user_data = getattr(profile, "user_data", None)
+        if isinstance(user_data, dict):
+            return user_data.get(name, default)
+        return default
+
+    def _find_agent_profile(self, agent_profiles: list, agent_id: str) -> Any:
+        return next((profile for profile in agent_profiles if self._profile_id(profile) == agent_id), None)
+
     def calculate_updates(
         self,
         agent_id: str,
@@ -89,8 +113,8 @@ class OpinionCalculator:
             # Validate model selection
             if model_name == "llm_evaluation":
                 # Check if this is an LLM agent
-                agent_profile = next((a for a in agent_profiles if a.id == agent_id), None)
-                if not agent_profile or not agent_profile.llm:
+                agent_profile = self._find_agent_profile(agent_profiles, agent_id)
+                if not agent_profile or not bool(self._profile_attr(agent_profile, "llm", True)):
                     self.logger.error(
                         f"llm_evaluation model can only be used with LLM agents. "
                         f"Agent {agent_id} is not an LLM agent. Skipping opinion update."
@@ -122,9 +146,12 @@ class OpinionCalculator:
                 if not topic_name:
                     continue
 
-                agent_profile = next((a for a in agent_profiles if a.id == agent_id), None)
-                stubborn_topics = getattr(agent_profile, "stubborn_topics", {}) or {}
-                if bool(stubborn_topics.get(str(topic_name), False)):
+                agent_profile = self._find_agent_profile(agent_profiles, agent_id)
+                stubborn_topics = self._profile_attr(agent_profile, "stubborn_topics", {}) or {}
+                if isinstance(stubborn_topics, list):
+                    if str(topic_name) in {str(item) for item in stubborn_topics}:
+                        continue
+                elif bool(stubborn_topics.get(str(topic_name), False)):
                     continue
 
                 # Get agent's LATEST opinion from database (not cached profile)

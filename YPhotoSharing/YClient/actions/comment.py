@@ -35,6 +35,16 @@ def _annotation_config(agent_attrs: Optional[dict]) -> dict:
     }
 
 
+async def _build_annotations(body: str, agent_attrs: Optional[dict], llm_service) -> dict:
+    annotations = annotate_content(body, _annotation_config(agent_attrs), llm_handle=None)
+    if (agent_attrs or {}).get("enable_emotion_annotation", True) and llm_service is not None:
+        try:
+            annotations["emotions"] = await llm_service.extract_emotions.remote(body)
+        except Exception:
+            annotations["emotions"] = []
+    return annotations
+
+
 async def post_comment(
     server,
     llm_service,
@@ -126,7 +136,7 @@ async def post_comment(
     if not body or not body.strip():
         return None
 
-    annotations = annotate_content(body.strip(), _annotation_config(agent_attrs), llm_handle=llm_service)
+    annotations = await _build_annotations(body.strip(), agent_attrs, llm_service)
 
     try:
         sentiment_score = None

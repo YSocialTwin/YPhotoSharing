@@ -4,10 +4,12 @@ import sys
 import types
 from types import SimpleNamespace
 
+from YPhotoSharing.YClient.agent_management.agent import Agent
 from YPhotoSharing.YClient.opinion_dynamics.llm_evaluation import llm_evaluation
 from YPhotoSharing.YClient.opinion.opinion_calculator import OpinionCalculator
+from YPhotoSharing.YClient.opinion.opinion_manager import OpinionManager
 from YPhotoSharing.YServer.classes.db_middleware import DatabaseMiddleware
-from YPhotoSharing.YServer.classes.models import OpinionPath, UserOpinion
+from YPhotoSharing.YServer.classes.models import MemoryInteractionEvent, OpinionPath, UserOpinion
 
 
 def _make_db(tmpdir: str) -> DatabaseMiddleware:
@@ -147,3 +149,70 @@ def test_opinion_calculator_llm_path_handles_neighbors_scope_without_name_errors
     )
 
     assert 0.0 <= value <= 1.0
+
+
+def test_opinion_calculator_supports_yphotosharing_agent_objects(monkeypatch):
+    monkeypatch.setattr(
+        "YPhotoSharing.YClient.opinion.opinion_calculator.ray.get",
+        lambda value: value,
+    )
+
+    class FakeRemoteMethod:
+        def __init__(self, fn):
+            self.fn = fn
+
+        def remote(self, *args, **kwargs):
+            return self.fn(*args, **kwargs)
+
+    fake_server = SimpleNamespace(
+        get_photo_topics=FakeRemoteMethod(lambda post_id: ["topic-1"]),
+        get_topic_name_from_id=FakeRemoteMethod(lambda topic_id, client_id=None: "travel"),
+        get_latest_agent_opinion=FakeRemoteMethod(lambda user_id, topic_id, client_id=None: 0.6 if user_id == "author-1" else 0.4),
+    )
+    calculator = OpinionCalculator(
+        opinion_config={"model_name": "bounded_confidence", "parameters": {}, "opinion_groups": {}},
+        server=fake_server,
+        llm_manager=None,
+        client_id="client-1",
+        logger=SimpleNamespace(error=lambda *args, **kwargs: None, info=lambda *args, **kwargs: None, debug=lambda *args, **kwargs: None),
+        get_opinion_group_fn=lambda value: "Neutral",
+    )
+    agent = Agent(
+        user_data={"id": "user-1", "username": "alice", "stubborn_topics": []},
+        server=None,
+        llm_service=None,
+    )
+
+    updates = calculator.calculate_updates(
+        agent_id="user-1",
+        parent_post_id="post-1",
+        parent_post_data={"user_id": "author-1", "caption": "Trip"},
+        agent_profiles=[agent],
+    )
+
+    assert updates is not None
+    assert "topic-1" in updates
+
+
+def test_memory_events_accept_legacy_alias_keys():
+    db = DatabaseMiddleware()
+    event_id = db.add_memory_event(
+        {
+            "run_id": "default",
+            "round_id": 3,
+            "agent_user_id": "user-1",
+            "other_user_id": "user-2",
+            "event_type": "commented",
+            "description": "Commented on a photo",
+        }
+    )
+
+    with db.session_scope() as session:
+        row = session.query(MemoryInteractionEvent).filter_by(id=event_id).one()
+        assert row.actor_user_id == "user-1"
+        assert row.target_user_id == "user-2"
+        assert row.event_text == "Commented on a photo"
+
+    events = db.get_memory_events("default", "user-1")
+    assert events[0]["other_user_id"] == "user-2"
+    assert events[0]["description"] == "Commented on a photo"

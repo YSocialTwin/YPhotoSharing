@@ -684,8 +684,38 @@ class DatabaseMiddleware:
         self.add_post_hashtag(photo_id, hashtag_id)
 
     def add_memory_event(self, event_data: dict) -> int:
+        payload = dict(event_data or {})
+        normalized = {
+            "run_id": payload.get("run_id"),
+            "round_id": payload.get("round_id", 0),
+            "actor_user_id": payload.get("actor_user_id", payload.get("agent_user_id")),
+            "target_user_id": payload.get("target_user_id", payload.get("other_user_id")),
+            "target_photo_id": payload.get("target_photo_id"),
+            "actor_photo_id": payload.get("actor_photo_id"),
+            "event_type": payload.get("event_type"),
+            "relation_label": payload.get("relation_label"),
+            "tone_label": payload.get("tone_label"),
+            "topics_json": payload.get("topics_json"),
+            "salient_claim": payload.get("salient_claim"),
+            "event_text": payload.get("event_text", payload.get("description")),
+            "weight": payload.get("weight", 1.0),
+            "importance": payload.get("importance", 0.0),
+            "last_accessed_round": payload.get("last_accessed_round"),
+            "access_count": payload.get("access_count", 0),
+        }
+        if normalized["topics_json"] is None and payload.get("topics") is not None:
+            normalized["topics_json"] = json.dumps(payload.get("topics"))
+        try:
+            normalized["round_id"] = int(normalized["round_id"])
+        except (TypeError, ValueError):
+            normalized["round_id"] = 0
+        if normalized["last_accessed_round"] is None:
+            normalized["last_accessed_round"] = normalized["round_id"]
+
+        allowed_keys = {column.name for column in MemoryInteractionEvent.__table__.columns}
+        normalized = {key: value for key, value in normalized.items() if key in allowed_keys}
         with self.session_scope() as session:
-            event = MemoryInteractionEvent(**event_data)
+            event = MemoryInteractionEvent(**normalized)
             session.add(event)
             session.flush()
             return int(event.id)
@@ -700,7 +730,12 @@ class DatabaseMiddleware:
                 .all()
             )
             return [
-                {column.name: getattr(row, column.name) for column in MemoryInteractionEvent.__table__.columns}
+                {
+                    **{column.name: getattr(row, column.name) for column in MemoryInteractionEvent.__table__.columns},
+                    "agent_user_id": row.actor_user_id,
+                    "other_user_id": row.target_user_id,
+                    "description": row.event_text,
+                }
                 for row in rows
             ]
 
@@ -801,7 +836,11 @@ class DatabaseMiddleware:
         from YPhotoSharing.YServer.recsys.explore_recsys import ExploreRecsys
 
         with self.session_scope() as session:
-            followed_subq = session.query(Follow.user_id).filter_by(follower_id=user_id, action="follow").subquery()
+            followed_subq = (
+                session.query(Follow.user_id)
+                .filter_by(follower_id=user_id, action="follow")
+                .scalar_subquery()
+            )
             rows = (
                 session.query(Photo)
                 .filter(
