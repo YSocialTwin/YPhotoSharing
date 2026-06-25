@@ -39,12 +39,12 @@ def test_setup_logging_writes_client_actor_log():
         assert payload["level"] == "INFO"
 
 
-def test_setup_logging_writes_server_log_with_normalized_name():
+def test_setup_logging_writes_server_log_with_ysimulator_name():
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = setup_logging(Path(tmpdir), "server", enable_console=False, instance_name="orchestrator_server")
         logger.info("server log message")
 
-        log_file = Path(tmpdir) / "logs" / "orchestrator_server.log"
+        log_file = Path(tmpdir) / "logs" / "orchestrator_server_server.log"
         assert log_file.exists()
         payload = _read_last_json_line(log_file)
         assert payload["message"] == "server log message"

@@ -196,10 +196,6 @@ def setup_logging(
 
     component_key = component_name.lower()
     resolved_name = instance_name or component_key
-    if component_key == "server" and resolved_name.endswith("_server"):
-        resolved_name = resolved_name[: -len("_server")]
-    if component_key == "client" and resolved_name.endswith("_client"):
-        resolved_name = resolved_name[: -len("_client")]
 
     if component_key == "client":
         log_file = log_dir / f"{resolved_name}_execution.log"
