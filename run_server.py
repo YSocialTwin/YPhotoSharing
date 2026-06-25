@@ -51,7 +51,7 @@ def main():
 
     # Database config
     db_config = config.get("database", {}) or {"type": "sqlite", "sqlite": {"filename": "yphotosharing.db"}}
-    simulation_config = config.get("simulation", {})
+    simulation_config = config
 
     # Initialise DB if needed
     if not database_exists(db_config, config_dir):
