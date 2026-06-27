@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
 
-from sqlalchemy import and_, create_engine, func, or_
+from sqlalchemy import and_, create_engine, func, or_, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .models import (
@@ -107,6 +107,7 @@ class DatabaseMiddleware:
         self.engine = create_engine(connection_string, future=True, **engine_kwargs)
         self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False, future=True)
         Base.metadata.create_all(self.engine)
+        self._ensure_story_schema()
 
     def _build_connection_string(self, db_config: Dict[str, Any]) -> str:
         db_type = (db_config.get("type") or "sqlite").lower()
@@ -132,6 +133,26 @@ class DatabaseMiddleware:
             raise
         finally:
             session.close()
+
+    def _table_columns(self, table_name: str) -> set[str]:
+        with self.engine.connect() as connection:
+            rows = connection.execute(text(f"PRAGMA table_info({table_name})")).mappings().all()
+        return {str(row["name"]) for row in rows}
+
+    def _ensure_story_schema(self) -> None:
+        if self.engine.url.get_backend_name() != "sqlite":
+            return
+
+        existing_columns = self._table_columns("stories")
+        pending_statements = [
+            ("title", "ALTER TABLE stories ADD COLUMN title VARCHAR(120)"),
+            ("description", "ALTER TABLE stories ADD COLUMN description TEXT"),
+            ("image_urls", "ALTER TABLE stories ADD COLUMN image_urls TEXT"),
+        ]
+        with self.engine.begin() as connection:
+            for column_name, statement in pending_statements:
+                if column_name not in existing_columns:
+                    connection.execute(text(statement))
 
     def initialize_emotions_table(self) -> bool:
         with self.session_scope() as session:
@@ -570,6 +591,50 @@ class DatabaseMiddleware:
             story_id = story_data.get("id") or str(uuid.uuid4())
             valid_keys = {column.name for column in Story.__table__.columns}
             filtered = {k: v for k, v in story_data.items() if k in valid_keys and k != "id"}
+            image_urls = filtered.get("image_urls")
+            if isinstance(image_urls, str):
+                try:
+                    image_urls = json.loads(image_urls)
+                except json.JSONDecodeError:
+                    image_urls = [image_urls] if image_urls else []
+            elif image_urls is None:
+                image_urls = []
+            elif not isinstance(image_urls, list):
+                image_urls = [image_urls]
+
+            normalized_urls: List[str] = []
+            for item in image_urls:
+                if isinstance(item, dict):
+                    candidate = item.get("url") or item.get("image_url") or item.get("media_url")
+                else:
+                    candidate = item
+                candidate = str(candidate).strip() if candidate is not None else ""
+                if candidate and candidate not in normalized_urls:
+                    normalized_urls.append(candidate)
+
+            media_url = str(filtered.get("media_url") or "").strip()
+            if not media_url and normalized_urls:
+                media_url = normalized_urls[0]
+            if not normalized_urls and media_url:
+                normalized_urls = [media_url]
+
+            title = str(filtered.get("title") or filtered.get("caption") or "Story").strip()
+            description = str(filtered.get("description") or filtered.get("caption") or title).strip()
+            caption = str(filtered.get("caption") or description or title).strip()
+            media_type = str(filtered.get("media_type") or ("carousel" if len(normalized_urls) > 1 else "image")).strip()
+
+            filtered["media_url"] = media_url
+            filtered["media_type"] = media_type
+            filtered["title"] = title
+            filtered["description"] = description
+            filtered["caption"] = caption
+            filtered["image_urls"] = json.dumps(normalized_urls)
+
+            if not filtered["media_url"]:
+                raise ValueError("Stories must include at least one existing image URL.")
+            if not normalized_urls:
+                raise ValueError("Stories must include at least one existing image URL.")
+
             session.add(Story(id=story_id, **filtered))
             return story_id
 
@@ -598,9 +663,37 @@ class DatabaseMiddleware:
                 .all()
             )
             return [
-                {column.name: getattr(row, column.name) for column in Story.__table__.columns}
+                self._serialize_story(row)
                 for row in rows
             ]
+
+    def _serialize_story(self, story: Story) -> Dict[str, Any]:
+        payload = {column.name: getattr(story, column.name) for column in Story.__table__.columns}
+        image_urls_raw = payload.get("image_urls")
+        image_urls: List[str] = []
+        if isinstance(image_urls_raw, str) and image_urls_raw.strip():
+            try:
+                parsed = json.loads(image_urls_raw)
+            except json.JSONDecodeError:
+                parsed = [image_urls_raw]
+            if isinstance(parsed, list):
+                image_urls = [str(item).strip() for item in parsed if str(item).strip()]
+            elif parsed:
+                image_urls = [str(parsed).strip()]
+        elif isinstance(image_urls_raw, list):
+            image_urls = [str(item).strip() for item in image_urls_raw if str(item).strip()]
+
+        if not image_urls and payload.get("media_url"):
+            image_urls = [str(payload["media_url"]).strip()]
+
+        payload["image_urls"] = image_urls
+        if not payload.get("title"):
+            payload["title"] = payload.get("caption") or "Story"
+        if not payload.get("description"):
+            payload["description"] = payload.get("caption") or payload["title"] or ""
+        if not payload.get("caption"):
+            payload["caption"] = payload["description"] or payload["title"]
+        return payload
 
     def update_photo_sentiment(self, photo_id: str, sentiment_score: float) -> bool:
         with self.session_scope() as session:

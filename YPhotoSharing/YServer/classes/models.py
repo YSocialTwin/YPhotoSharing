@@ -264,8 +264,8 @@ class Story(Base):
     """
     Ephemeral story – visible for 24 h in simulation time.
 
-    Stories can contain images or short video clips (represented as a URL)
-    and may have interactive stickers (polls, questions, sliders).
+    Stories are published as short collections of already existing user images
+    together with a compact title and a longer description.
     """
 
     __tablename__ = "stories"
@@ -274,11 +274,14 @@ class Story(Base):
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
     round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
     media_url = Column(String(400), nullable=False)
-    media_type = Column(String(20), default="image")   # "image" | "video"
+    media_type = Column(String(20), default="carousel")   # "image" | "video" | "carousel"
     duration_seconds = Column(Integer, default=5)
     sticker_type = Column(String(50))                  # "poll" | "question" | "slider" | None
     sticker_data = Column(Text)                        # JSON blob for sticker payload
     caption = Column(Text)                             # Optional text on the story
+    title = Column(String(120), nullable=False)
+    description = Column(Text, nullable=False)
+    image_urls = Column(Text, nullable=False, default="[]")
     view_count = Column(Integer, default=0)
     expires_at = Column(DateTime)
     created_at = Column(DateTime, server_default=func.now())

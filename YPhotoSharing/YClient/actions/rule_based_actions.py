@@ -120,3 +120,37 @@ def generate_rule_based_story(topic: str, username: str, cluster_id: int = 0) ->
         topic,
         cluster_id,
     )
+
+
+def generate_rule_based_story_title(topic: str, username: str, image_count: int, cluster_id: int = 0) -> str:
+    image_label = "photo" if image_count == 1 else "photos"
+    return _stable_choice(
+        [
+            f"{topic.title()} moments",
+            f"{username}'s {image_label}",
+            f"{image_count} recent {image_label}",
+            f"Snapshots from @{username}",
+            f"A quick {topic.title()} story",
+        ],
+        "story_title",
+        username,
+        topic,
+        image_count,
+        cluster_id,
+    )
+
+
+def generate_rule_based_story_description(topic: str, username: str, image_count: int, cluster_id: int = 0) -> str:
+    image_label = "image" if image_count == 1 else "images"
+    return _stable_choice(
+        [
+            f"Sharing {image_count} recent {image_label} from @{username} around {topic}.",
+            f"A short visual diary from @{username} with {image_count} {image_label} about {topic}.",
+            f"{username} collected {image_count} {image_label} for a {topic} story.",
+        ],
+        "story_description",
+        username,
+        topic,
+        image_count,
+        cluster_id,
+    )
