@@ -16,6 +16,7 @@ import logging
 import sys
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import ray
@@ -25,6 +26,33 @@ from YPhotoSharing.YClient.client import SimulationClient
 from YPhotoSharing.YClient.simulation.bootstrap import normalize_agent_population_document
 
 logger = logging.getLogger("YPhotoSharing.Client")
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _state_path_for_config(config_file: Path) -> Path:
+    return config_file.with_suffix(".state.json")
+
+
+def _load_state(state_path: Path) -> dict:
+    if not state_path.exists():
+        return {}
+    try:
+        with open(state_path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+        return state if isinstance(state, dict) else {}
+    except Exception:
+        return {}
+
+
+def _write_state(state_path: Path, payload: dict) -> None:
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+    tmp_path.replace(state_path)
 
 
 def main():
@@ -90,6 +118,13 @@ def main():
     llm_v_config = config.get("llm_vision")
     logging_config = config.get("logging", {})
     simulation_config = config.get("simulation", {})
+    state_path = _state_path_for_config(config_file)
+    state = _load_state(state_path)
+    if "completed_rounds" not in state and "elapsed_rounds" in state:
+        state["completed_rounds"] = state.get("elapsed_rounds", 0)
+    start_round = int(state.get("completed_rounds") or state.get("elapsed_rounds") or 0)
+    if start_round < 0:
+        start_round = 0
 
     # Load agent population
     population_filename = config.get("agents_file") or config.get("users_file") or "agents.json"
@@ -106,6 +141,8 @@ def main():
 
     num_rounds = simulation_config.get("num_rounds", 24)
     start_day = simulation_config.get("start_day", 0)
+    slots_per_day = int(simulation_config.get("num_slots_per_day", 24) or 24)
+    start_round = min(start_round, num_rounds)
 
     from YPhotoSharing.YClient.LLM_interactions.vision_service import VisionService
 
@@ -133,18 +170,63 @@ def main():
 
     n_loaded = ray.get(client_actor.load_agents.remote(users))
     print(f"--- 👤 Loaded {n_loaded} agents ---")
-    print(f"--- ▶  Running {num_rounds} rounds ---")
+    if start_round > 0:
+        print(f"--- ↻ Resuming from round {start_round + 1} of {num_rounds} ---")
+    print(f"--- ▶  Running {num_rounds - start_round} remaining rounds ---")
 
-    for round_num in range(num_rounds):
-        day = start_day + round_num // 24
-        hour = round_num % 24
+    if start_round >= num_rounds:
+        state.update(
+            {
+                "completed": True,
+                "completed_rounds": num_rounds,
+                "elapsed_rounds": num_rounds,
+                "expected_duration_rounds": num_rounds,
+                "progress": 100 if num_rounds > 0 else 0,
+                "updated_at": _now_iso(),
+            }
+        )
+        _write_state(state_path, state)
+        print("--- ✅ Simulation already completed ---")
+        ray.shutdown()
+        return
+
+    for round_num in range(start_round, num_rounds):
+        day = start_day + round_num // slots_per_day
+        hour = round_num % slots_per_day
         summary = ray.get(client_actor.run_round.remote(day=day, hour=hour))
+        state.update(
+            {
+                "version": 1,
+                "completed_rounds": round_num + 1,
+                "elapsed_rounds": round_num + 1,
+                "last_round_id": summary.get("round_id"),
+                "last_day": day,
+                "last_hour": hour,
+                "expected_duration_rounds": num_rounds,
+                "progress": (
+                    0
+                    if num_rounds <= 0
+                    else min(100, int(((round_num + 1) / num_rounds) * 100))
+                ),
+                "completed": False,
+                "updated_at": _now_iso(),
+            }
+        )
+        _write_state(state_path, state)
         print(
             f"  Round {round_num + 1:>4}/{num_rounds}  "
             f"day={summary['day']} hour={summary['hour']}  "
             f"actions={summary['actions']}"
         )
 
+    state.update(
+        {
+            "completed": True,
+            "progress": 100 if num_rounds > 0 else 0,
+            "updated_at": _now_iso(),
+        }
+    )
+    _write_state(state_path, state)
     print("--- ✅ Simulation complete ---")
     ray.shutdown()
 

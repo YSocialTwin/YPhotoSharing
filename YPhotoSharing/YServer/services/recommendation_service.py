@@ -63,32 +63,38 @@ class RecommendationService:
         For simplicity, we count all hashtag occurrences.
         """
         logger.info(f"Computing trending hashtags for round {round_id}")
-        
-        # Query top 10 hashtags by usage in photos
+
+        # Replace any previous snapshot for the same round so the operation is
+        # safe to re-run if the round gets replayed or retried.
+        db.query(TrendingHashtag).filter_by(round_id=round_id).delete(
+            synchronize_session=False
+        )
+
+        # Query top 10 hashtags by usage in photos.
         top_tags = (
-            db.query(Hashtag.hashtag, func.count(PhotoHashtag.photo_id).label("count"))
+            db.query(
+                Hashtag.id.label("hashtag_id"),
+                Hashtag.hashtag.label("hashtag"),
+                func.count(PhotoHashtag.photo_id).label("count"),
+            )
             .join(PhotoHashtag, Hashtag.id == PhotoHashtag.hashtag_id)
-            .group_by(Hashtag.id)
+            .group_by(Hashtag.id, Hashtag.hashtag)
             .order_by(func.count(PhotoHashtag.photo_id).desc())
             .limit(10)
             .all()
         )
-        
+
         if top_tags:
-            trend_id = str(uuid.uuid4())
             rank = 1
-            for tag, count in top_tags:
-                # Find the hashtag_id for the given tag
-                ht = db.query(Hashtag).filter_by(hashtag=tag).first()
-                if ht:
-                    trend_record = TrendingHashtag(
-                        id=str(uuid.uuid4()),
-                        hashtag_id=ht.id,
-                        round_id=round_id,
-                        photo_count=count,
-                        rank=rank
-                    )
-                    db.add(trend_record)
-                    rank += 1
+            for hashtag_id, _tag, count in top_tags:
+                trend_record = TrendingHashtag(
+                    id=str(uuid.uuid4()),
+                    hashtag_id=hashtag_id,
+                    round_id=round_id,
+                    photo_count=count,
+                    rank=rank,
+                )
+                db.add(trend_record)
+                rank += 1
             db.commit()
             logger.info(f"Trending hashtags for round {round_id} updated.")

@@ -424,6 +424,7 @@ class SimulationClient:
             "round": self._round_count,
             "day": day,
             "hour": hour,
+            "round_id": round_id,
             "agents": len(self._agents),
             "actions": total_actions,
         }
