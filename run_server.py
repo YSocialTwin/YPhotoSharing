@@ -10,6 +10,7 @@ The config directory must contain a ``server_config.json`` file.
 """
 
 import argparse
+import hashlib
 import json
 import logging
 import sys
@@ -23,6 +24,12 @@ from YPhotoSharing.utils.init_db import database_exists, initialize_database
 from YPhotoSharing.YServer.server import OrchestratorServer
 
 logger = logging.getLogger("YPhotoSharing.Server")
+
+
+def build_isolated_namespace(base_namespace: str, config_dir: Path) -> str:
+    """Build a stable per-experiment namespace for shared Ray clusters."""
+    digest = hashlib.sha256(str(config_dir.resolve()).encode()).hexdigest()[:10]
+    return f"{base_namespace}_{digest}"
 
 
 def main():
@@ -43,7 +50,8 @@ def main():
         
     global logger
     server_name = config.get("server_name", "orchestrator_server")
-    namespace = config.get("namespace", "yphotosharing")
+    configured_namespace = config.get("namespace", "yphotosharing")
+    namespace = build_isolated_namespace(configured_namespace, config_dir)
     min_to_start = config.get("min_to_start", 1)
     timeout_seconds = config.get("timeout_seconds", 60)
     logging_config = config.get("logging", {})
@@ -85,7 +93,7 @@ def main():
     # Launch orchestrator actor
     try:
         old_actor = ray.get_actor(server_name, namespace=namespace)
-        ray.kill(old_actor)
+        ray.kill(old_actor, no_restart=True)
     except ValueError:
         pass
 
