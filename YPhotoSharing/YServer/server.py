@@ -231,6 +231,10 @@ class OrchestratorServer:
             "run_id": self._run_id,
         }
 
+    def is_ready(self) -> bool:
+        """Return True once the orchestrator has finished initializing."""
+        return True
+
     def ready_for_next_round(self, client_id: str) -> bool:
         self._round_ready[client_id] = True
         all_ready = all(self._round_ready.get(cid, False) for cid in self._registered_clients)

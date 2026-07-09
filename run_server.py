@@ -83,6 +83,7 @@ def main():
     gcs_address = ray.get_runtime_context().gcs_address
     (config_dir / "ray_config.temp").write_text(gcs_address)
     (config_dir / "ray_namespace.temp").write_text(namespace)
+    ready_file = config_dir / "ray_ready.temp"
 
     print(f"--- 🚀 Server Running ---")
     print(f"--- 📝 Server Name: {server_name} ---")
@@ -106,12 +107,16 @@ def main():
         simulation_config=simulation_config,
     )
 
+    # Confirm the actor is fully initialized before advertising readiness to clients.
+    ray.get(server_actor.is_ready.remote())
+    ready_file.write_text(f"{namespace}\n")
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nStopping server…")
-        for tmp in ["ray_config.temp", "ray_namespace.temp"]:
+        for tmp in ["ray_config.temp", "ray_namespace.temp", "ray_ready.temp"]:
             p = config_dir / tmp
             if p.exists():
                 p.unlink()
