@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from YPhotoSharing.YServer.recsys.base_recsys import BaseRecsys
-from YPhotoSharing.YServer.classes.models import Photo, PhotoTopic, UserInterest, Reaction
+from YPhotoSharing.YServer.classes.models import Photo, PhotoTopic, Round, UserInterest, Reaction
 
 class ContentBasedRecsys(BaseRecsys):
     """
@@ -43,9 +43,14 @@ class ContentBasedRecsys(BaseRecsys):
 
         # 2. Candidate generation
         # We fetch recent photos not created by the user
-        candidates = db.query(Photo).filter(
-            Photo.user_id != user_id
-        ).order_by(Photo.created_at.desc()).limit(200).all()
+        candidates = (
+            db.query(Photo)
+            .join(Round, Round.id == Photo.round)
+            .filter(Photo.user_id != user_id)
+            .order_by(Round.day.desc(), Round.hour.desc(), Photo.created_at.desc())
+            .limit(200)
+            .all()
+        )
 
         if not candidates:
             return []
@@ -74,4 +79,3 @@ class ContentBasedRecsys(BaseRecsys):
         # Sort by score descending
         sorted_pids = sorted(scores, key=lambda x: x[1], reverse=True)
         return [pid for pid, score in sorted_pids[:limit]]
-

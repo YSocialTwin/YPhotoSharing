@@ -80,6 +80,7 @@ class Round(Base):
     id = Column(String(36), primary_key=True)
     day = Column(Integer)
     hour = Column(Integer)
+    created_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (UniqueConstraint("day", "hour", name="uq_round_day_hour"),)
 
@@ -363,6 +364,7 @@ class SavedPhoto(Base):
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
     photo_id = Column(String(36), ForeignKey("photos.id", ondelete="CASCADE"), nullable=False)
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
 class Message(Base):
@@ -383,6 +385,7 @@ class StoryView(Base):
     id = Column(String(36), primary_key=True)
     story_id = Column(String(36), ForeignKey("stories.id", ondelete="CASCADE"), nullable=False)
     viewer_id = Column(String(36), ForeignKey("user_mgmt.id", ondelete="CASCADE"), nullable=False)
+    round = Column(String(36), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
     viewed_at = Column(DateTime, server_default=func.now())
 
     story = relationship("Story", back_populates="views")

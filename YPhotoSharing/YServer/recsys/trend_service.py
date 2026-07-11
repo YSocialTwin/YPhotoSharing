@@ -1,7 +1,6 @@
 from typing import List, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta
 
 class TrendService:
     """
@@ -19,29 +18,46 @@ class TrendService:
         if not hashtags:
             return 1.0
 
-        from YPhotoSharing.YServer.classes.models import Photo
-        
-        # We approximate momentum by querying recent vs older usage
-        now = datetime.utcnow()
-        recent_window = now - timedelta(hours=24)
-        older_window = now - timedelta(hours=48)
+        from YPhotoSharing.YServer.classes.models import Photo, Round
+
+        current_round = (
+            self.db.query(Round)
+            .order_by(Round.day.desc(), Round.hour.desc(), Round.id.desc())
+            .first()
+        )
+        if current_round is None:
+            return 1.0
+
+        current_index = int(current_round.day or 0) * 24 + int(current_round.hour or 0)
+        recent_lower = max(0, current_index - 24)
+        older_lower = max(0, current_index - 48)
         
         total_momentum = 0.0
         
         # We use a naive "LIKE" search for hashtags for simplicity
         for ht in hashtags:
             # recent frequency
-            recent_count = self.db.query(Photo).filter(
-                Photo.caption.like(f"%{ht}%"),
-                Photo.created_at >= recent_window
-            ).count()
+            recent_count = (
+                self.db.query(Photo)
+                .join(Round, Round.id == Photo.round)
+                .filter(
+                    Photo.caption.like(f"%{ht}%"),
+                    (Round.day * 24 + Round.hour) >= recent_lower,
+                )
+                .count()
+            )
             
             # older frequency
-            older_count = self.db.query(Photo).filter(
-                Photo.caption.like(f"%{ht}%"),
-                Photo.created_at >= older_window,
-                Photo.created_at < recent_window
-            ).count()
+            older_count = (
+                self.db.query(Photo)
+                .join(Round, Round.id == Photo.round)
+                .filter(
+                    Photo.caption.like(f"%{ht}%"),
+                    (Round.day * 24 + Round.hour) >= older_lower,
+                    (Round.day * 24 + Round.hour) < recent_lower,
+                )
+                .count()
+            )
             
             if older_count == 0:
                 if recent_count > 0:

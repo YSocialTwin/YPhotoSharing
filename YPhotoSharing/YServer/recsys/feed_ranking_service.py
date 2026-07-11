@@ -1,6 +1,5 @@
 from typing import Dict, List, Optional, Set
 import math
-from datetime import datetime
 
 class FeedRankingService:
     """
@@ -75,18 +74,34 @@ class FeedRankingService:
         total_interactions = reactions_count + (comments_count * 2) + (saved_count * 2)
         return math.log1p(total_interactions)
 
+    def _round_index(self, round_row) -> int:
+        if round_row is None:
+            return 0
+        try:
+            return int(round_row.day or 0) * 24 + int(round_row.hour or 0)
+        except Exception:
+            return 0
+
     def rank_feed(self, user_id: str, candidates: List[Dict]) -> List[Dict]:
         """
         Takes a list of candidate photos (dicts from DB) and ranks them.
         """
         ranked_candidates = []
-        now = datetime.utcnow()
+        from YPhotoSharing.YServer.classes.models import Round
+
+        current_round = (
+            self.db.query(Round)
+            .order_by(Round.day.desc(), Round.hour.desc(), Round.id.desc())
+            .first()
+        )
+        current_round_index = self._round_index(current_round)
         user_interests = self._get_user_interest_terms(user_id)
-        
+
         # Cache edge weights to avoid N DB queries for the same author
         edge_weights = {}
         photo_topics_cache: Dict[str, Set[str]] = {}
         photo_emotions_cache: Dict[str, Set[str]] = {}
+        round_cache: Dict[str, int] = {}
 
         for photo in candidates:
             author_id = photo["user_id"]
@@ -98,15 +113,14 @@ class FeedRankingService:
             # Content quality base score
             viral_score = photo.get("viral_score", 1.0)
             
-            # Decay (hours since posted)
-            created_at = photo.get("created_at")
-            if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(created_at)
-            
+            # Decay by simulation age, not wall-clock age.
+            round_id = str(photo.get("round") or "").strip()
             hours_old = 0
-            if created_at:
-                delta = now - created_at
-                hours_old = max(0, delta.total_seconds() / 3600.0)
+            if round_id:
+                if round_id not in round_cache:
+                    round_row = self.db.query(Round).filter(Round.id == round_id).first()
+                    round_cache[round_id] = self._round_index(round_row)
+                hours_old = max(0, current_round_index - round_cache[round_id])
 
             photo_id = photo.get("id")
             topic_overlap = 0.0

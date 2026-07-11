@@ -407,6 +407,14 @@ class DatabaseMiddleware:
         session.flush()
         return interest_id
 
+    def _latest_round_id(self, session: Session) -> str:
+        round_row = (
+            session.query(Round)
+            .order_by(Round.day.desc(), Round.hour.desc(), Round.id.desc())
+            .first()
+        )
+        return round_row.id if round_row is not None else ""
+
     def get_photo(self, photo_id: str) -> Optional[dict]:
         with self.session_scope() as session:
             photo = session.query(Photo).filter(Photo.id == photo_id).first()
@@ -418,8 +426,9 @@ class DatabaseMiddleware:
         with self.session_scope() as session:
             photos = (
                 session.query(Photo)
+                .join(Round, Round.id == Photo.round)
                 .filter(Photo.user_id == user_id)
-                .order_by(Photo.created_at.desc())
+                .order_by(Round.day.desc(), Round.hour.desc(), Photo.created_at.desc())
                 .offset(offset)
                 .limit(limit)
                 .all()
@@ -575,8 +584,9 @@ class DatabaseMiddleware:
         with self.session_scope() as session:
             rows = (
                 session.query(Comment)
+                .join(Round, Round.id == Comment.round)
                 .filter_by(photo_id=photo_id, is_deleted=False, parent_comment_id=None)
-                .order_by(Comment.created_at)
+                .order_by(Round.day.asc(), Round.hour.asc(), Comment.created_at)
                 .limit(limit)
                 .offset(offset)
                 .all()
@@ -643,7 +653,14 @@ class DatabaseMiddleware:
             existing = session.query(StoryView).filter_by(story_id=story_id, viewer_id=viewer_id).first()
             if existing is not None:
                 return False
-            session.add(StoryView(id=str(uuid.uuid4()), story_id=story_id, viewer_id=viewer_id))
+            session.add(
+                StoryView(
+                    id=str(uuid.uuid4()),
+                    story_id=story_id,
+                    viewer_id=viewer_id,
+                    round=self._latest_round_id(session),
+                )
+            )
             story = session.query(Story).filter_by(id=story_id).first()
             if story is not None:
                 story.view_count = (story.view_count or 0) + 1
@@ -657,8 +674,9 @@ class DatabaseMiddleware:
                 return []
             rows = (
                 session.query(Story)
+                .join(Round, Round.id == Story.round)
                 .filter(Story.user_id.in_(following_ids))
-                .order_by(Story.created_at.desc())
+                .order_by(Round.day.desc(), Round.hour.desc(), Story.created_at.desc())
                 .limit(limit)
                 .all()
             )
@@ -881,12 +899,26 @@ class DatabaseMiddleware:
     def save_photo(self, user_id: str, photo_id: str) -> str:
         with self.session_scope() as session:
             save_id = str(uuid.uuid4())
-            session.add(SavedPhoto(id=save_id, user_id=user_id, photo_id=photo_id))
+            session.add(
+                SavedPhoto(
+                    id=save_id,
+                    user_id=user_id,
+                    photo_id=photo_id,
+                    round=self._latest_round_id(session),
+                )
+            )
             return save_id
 
     def get_saved_photos(self, user_id: str, limit: int = 30) -> List[dict]:
         with self.session_scope() as session:
-            rows = session.query(SavedPhoto).filter_by(user_id=user_id).limit(limit).all()
+            rows = (
+                session.query(SavedPhoto)
+                .join(Round, Round.id == SavedPhoto.round)
+                .filter_by(user_id=user_id)
+                .order_by(Round.day.desc(), Round.hour.desc(), SavedPhoto.created_at.desc())
+                .limit(limit)
+                .all()
+            )
             return [
                 {column.name: getattr(row, column.name) for column in SavedPhoto.__table__.columns}
                 for row in rows
@@ -910,13 +942,14 @@ class DatabaseMiddleware:
         with self.session_scope() as session:
             rows = (
                 session.query(DirectMessage)
+                .join(Round, Round.id == DirectMessage.round)
                 .filter(
                     or_(
                         DirectMessage.sender_id == user_id,
                         DirectMessage.recipient_id == user_id,
                     )
                 )
-                .order_by(DirectMessage.created_at.desc())
+                .order_by(Round.day.desc(), Round.hour.desc(), DirectMessage.created_at.desc())
                 .limit(limit)
                 .all()
             )
@@ -936,12 +969,13 @@ class DatabaseMiddleware:
             )
             rows = (
                 session.query(Photo)
+                .join(Round, Round.id == Photo.round)
                 .filter(
                     Photo.user_id.notin_(followed_subq),
                     Photo.user_id != user_id,
                     Photo.is_removed == 0,
                 )
-                .order_by(Photo.created_at.desc())
+                .order_by(Round.day.desc(), Round.hour.desc(), Photo.created_at.desc())
                 .limit(100)
                 .all()
             )
@@ -956,8 +990,9 @@ class DatabaseMiddleware:
         with self.session_scope() as session:
             rows = (
                 session.query(Photo)
+                .join(Round, Round.id == Photo.round)
                 .filter(Photo.caption.like(f"%#{hashtag}%"), Photo.is_removed == 0)
-                .order_by(Photo.created_at.desc())
+                .order_by(Round.day.desc(), Round.hour.desc(), Photo.created_at.desc())
                 .limit(limit)
                 .all()
             )
