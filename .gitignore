@@ -224,3 +224,4 @@ __marimo__/
 example/media/
 example/exports/
 logs/
+.playwright-cli
