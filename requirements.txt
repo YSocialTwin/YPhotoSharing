@@ -27,8 +27,12 @@ scikit-learn>=1.0.0,<2.0.0
 # pymysql>=1.0.0
 
 # --- Optional: Local Image Generation ---
-# Moved to requirements-imagegen.txt: its version caps (transformers, huggingface-hub) conflict with the
-# versions YWeb ships, so they must not be installed into the same environment by default.
+huggingface-hub<0.26.0
+diffusers<0.28.0
+transformers<4.45.0
+accelerate<0.30.0
+torchvision>=0.15.0
+torch>=2.0.0
 
 # --- Optional: vLLM batched inference (requires CUDA) ---
 # vllm>=0.4.0
