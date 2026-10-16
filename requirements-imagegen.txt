@@ -1,0 +1,10 @@
+# YPhotoSharing - optional local image generation.
+# Install with: pip install -r requirements-imagegen.txt
+# These caps conflict with the transformers / huggingface-hub / numpy versions shipped by YWeb (requirements.lock):
+# use a dedicated environment for the runtime when you need local image generation.
+huggingface-hub<0.26.0
+diffusers<0.28.0
+transformers<4.45.0
+accelerate<0.30.0
+torchvision>=0.15.0
+torch>=2.0.0
