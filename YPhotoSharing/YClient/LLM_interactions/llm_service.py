@@ -67,11 +67,11 @@ def _format_custom_features(agent_attrs: Optional[Dict[str, Any]]) -> str:
 
     if not parts:
         return ""
-    return f"Additional personal details: {'; '.join(parts)}."
+    return prompt_store.prompt("custom_features_persona", details="; ".join(parts))
 
 
 def _format_persona_context(agent_attrs: Optional[Dict[str, Any]]) -> str:
-    attrs = agent_attrs or {}
+    attrs = prompt_store.localize_attrs(agent_attrs or {})
     if not attrs:
         return ""
 
@@ -90,32 +90,32 @@ def _format_persona_context(agent_attrs: Optional[Dict[str, Any]]) -> str:
 
     profile_bits: List[str] = []
     if age not in (None, ""):
-        profile_bits.append(f"{age}-year-old")
+        profile_bits.append(prompt_store.prompt("persona_age", age=age))
     if gender:
         profile_bits.append(gender)
     if nationality:
-        profile_bits.append(f"from {nationality}")
+        profile_bits.append(prompt_store.prompt("persona_from", nationality=nationality))
     if education_level:
-        profile_bits.append(f"educated to {education_level} level")
+        profile_bits.append(prompt_store.prompt("persona_education", education_level=education_level))
     if profession:
-        profile_bits.append(f"working as a {profession}")
+        profile_bits.append(prompt_store.prompt("persona_profession", profession=profession))
     if leaning:
-        profile_bits.append(f"politically {leaning}")
+        profile_bits.append(prompt_store.prompt("persona_politics", leaning=leaning))
     if activity_profile:
-        profile_bits.append(f"activity profile {activity_profile}")
+        profile_bits.append(prompt_store.prompt("persona_activity", activity_profile=activity_profile))
     if archetype:
-        profile_bits.append(f"archetype {archetype}")
+        profile_bits.append(prompt_store.prompt("persona_archetype", archetype=archetype))
     if language:
-        profile_bits.append(f"speaks {language}")
+        profile_bits.append(prompt_store.prompt("persona_language", spoken=language))
     if profile_bits:
-        clauses.append(f"Profile: {', '.join(profile_bits)}.")
+        clauses.append(prompt_store.prompt("persona_profile", bits=", ".join(profile_bits)))
 
     trait_labels = [
-        ("oe", "openness"),
-        ("co", "conscientiousness"),
-        ("ex", "extraversion"),
-        ("ag", "agreeableness"),
-        ("ne", "neuroticism"),
+        ("oe", prompt_store.get("persona_trait_oe")),
+        ("co", prompt_store.get("persona_trait_co")),
+        ("ex", prompt_store.get("persona_trait_ex")),
+        ("ag", prompt_store.get("persona_trait_ag")),
+        ("ne", prompt_store.get("persona_trait_ne")),
     ]
     trait_bits = [
         f"{label}={attrs.get(key)}"
@@ -123,41 +123,41 @@ def _format_persona_context(agent_attrs: Optional[Dict[str, Any]]) -> str:
         if attrs.get(key) not in (None, "")
     ]
     if trait_bits:
-        clauses.append(f"Personality traits: {'; '.join(trait_bits)}.")
+        clauses.append(prompt_store.prompt("persona_traits", bits="; ".join(trait_bits)))
 
     status_bits: List[str] = []
     if attrs.get("is_verified"):
-        status_bits.append("verified account")
+        status_bits.append(prompt_store.get("persona_verified"))
     if attrs.get("is_private"):
-        status_bits.append("private account")
+        status_bits.append(prompt_store.get("persona_private"))
     if attrs.get("is_page"):
-        status_bits.append("page account")
+        status_bits.append(prompt_store.get("persona_page"))
     if attrs.get("toxicity") not in (None, ""):
-        status_bits.append(f"toxicity preference {attrs.get('toxicity')}")
+        status_bits.append(prompt_store.prompt("persona_toxicity", toxicity=attrs.get("toxicity")))
     if status_bits:
-        clauses.append(f"Account status: {', '.join(status_bits)}.")
+        clauses.append(prompt_store.prompt("persona_status", bits=", ".join(status_bits)))
 
     interests = attrs.get("interests") or []
     if isinstance(interests, list) and interests:
-        clauses.append(f"Interests: {_join_nonempty(interests)}.")
+        clauses.append(prompt_store.prompt("persona_interests", interests=_join_nonempty(interests)))
 
     if bio:
-        clauses.append(f"Bio: {bio}.")
+        clauses.append(prompt_store.prompt("persona_bio", bio=bio))
 
     photo_sharing = attrs.get("photo_sharing")
     if isinstance(photo_sharing, dict) and photo_sharing:
         photo_bits: List[str] = []
         favorite_filters = photo_sharing.get("favorite_filters") or []
         if isinstance(favorite_filters, list) and favorite_filters:
-            photo_bits.append(f"favorite filters: {_join_nonempty(favorite_filters)}")
+            photo_bits.append(prompt_store.prompt("persona_filters", filters=_join_nonempty(favorite_filters)))
         story_visibility = str(photo_sharing.get("story_visibility") or "").strip()
         if story_visibility:
-            photo_bits.append(f"story visibility: {story_visibility}")
+            photo_bits.append(prompt_store.prompt("persona_story", visibility=story_visibility))
         creator_tier = str(photo_sharing.get("creator_tier") or "").strip()
         if creator_tier:
-            photo_bits.append(f"creator tier: {creator_tier}")
+            photo_bits.append(prompt_store.prompt("persona_tier", tier=creator_tier))
         if photo_bits:
-            clauses.append(f"Photo-sharing profile: {'; '.join(photo_bits)}.")
+            clauses.append(prompt_store.prompt("persona_photo", bits="; ".join(photo_bits)))
 
     custom_features = _format_custom_features(attrs)
     if custom_features:

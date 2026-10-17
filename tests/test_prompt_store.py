@@ -193,3 +193,14 @@ def test_profile_values_read_in_the_prompt_language_without_touching_the_agent(c
 def test_english_runs_pass_nothing_to_workers(clean_language, tmp_path):
     ps.use_language_from_folder(_run_folder(tmp_path, "en"))
     assert ps.env_for_workers() == {}
+
+
+def test_persona_context_reads_in_italian_with_localized_profile_values(clean_language, tmp_path):
+    from YPhotoSharing.YClient.LLM_interactions.llm_service import _format_persona_context
+
+    folder = _run_folder(tmp_path, "it")
+    ps.use_language_from_folder(folder)
+    text = _format_persona_context({"age": 31, "gender": "male", "nationality": "American", "leaning": "centrist", "bio": "ciao"})
+    assert text.startswith("Profilo: 31 anni, uomo, di nazionalità statunitense")
+    assert "orientamento politico centrista" in text and "Bio: ciao." in text
+    assert "year-old" not in text and "Profile:" not in text
