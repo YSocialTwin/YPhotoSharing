@@ -1,0 +1,13 @@
+{
+ "llm_service__extract_emotions__1": "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+ "llm_service__extract_emotions__2": "Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: \"{text}\"\n\nReturn emotions as comma-separated list:",
+ "remote_batch_service__generate_caption__1": "Write an Instagram caption for a photo about: {topic}. Day {day}, slot {slot}. Max 30 words. Add 2-3 hashtags.",
+ "remote_batch_service__decide_reaction__1": "Read this Instagram caption and reply ONLY with one word: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {caption}",
+ "remote_batch_service__generate_comment__1": "{author} posted: \"{caption}\"\n\nWrite a brief Instagram comment (under 100 characters).",
+ "remote_batch_service__decide_follow__1": "Should you follow @{username}?\nBio: {bio}\nRecent topics: {topics}\nReply ONLY with: FOLLOW or SKIP.",
+ "remote_batch_service__extract_emotions__1": "Identify emotions from this text using ONLY GoEmotions labels: admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, desire, disappointment, disapproval, disgust, embarrassment, excitement, fear, gratitude, grief, joy, love, nervousness, optimism, pride, realization, relief, remorse, sadness, surprise, trust.\n\nText: \"{text}\"\n\nReturn emotions as a comma-separated list.",
+ "remote_batch_service__batch_generate_captions__1": "Write an Instagram caption for a photo about: {v1}. Day {v2}, slot {v3}. Max 30 words. Add 2-3 hashtags.",
+ "remote_batch_service__batch_decide_reactions__1": "Read this Instagram caption and reply ONLY with one word: LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {v1}",
+ "remote_batch_service__batch_generate_comments__1": "{v1} posted: \"{v2}\"\n\nWrite a brief Instagram comment (under 100 characters).",
+ "vllm_service__generate_comment__1": "{author} posted: \"{caption}\"\n\nWrite a brief Instagram comment (under 100 characters). You may @mention the author."
+}

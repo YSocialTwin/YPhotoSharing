@@ -19,6 +19,7 @@ from langchain_ollama import ChatOllama
 
 from YPhotoSharing.common_utils import build_structured_file_logger
 from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
+from YPhotoSharing import prompt_store
 
 logger = logging.getLogger(__name__)
 
@@ -459,11 +460,11 @@ class LLMService:
         cfg = self.prompts_config.get("extract_emotions", {})
         system_template = cfg.get(
             "system_template",
-            "You are an emotion classification assistant. Identify which emotions from the GoEmotions taxonomy the given text elicits.",
+            prompt_store.get("llm_service__extract_emotions__1"),
         )
         user_template = cfg.get(
             "user_template",
-            'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\nText: "{text}"\n\nReturn emotions as comma-separated list:',
+            prompt_store.get("llm_service__extract_emotions__2"),
         )
         emotion_list_text = (
             "admiration, amusement, anger, annoyance, approval, caring, confusion, curiosity, "

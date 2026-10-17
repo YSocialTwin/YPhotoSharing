@@ -6,14 +6,13 @@ import ray
 
 from .annotations import toxicity, vader_sentiment
 from .cleaning import extract_components
+from YPhotoSharing import prompt_store
 
 EMOTION_SYSTEM_TEMPLATE = (
-    "You are an emotion classification assistant. Identify which emotions from "
-    "the GoEmotions taxonomy the given text elicits."
+    prompt_store.get("llm_service__extract_emotions__1")
 )
 EMOTION_USER_TEMPLATE = (
-    'Identify emotions from this text. Choose ONLY from: {emotion_list}\n\n'
-    'Text: "{text}"\n\nReturn emotions as comma-separated list:'
+    prompt_store.get("llm_service__extract_emotions__2")
 )
 EMOTION_LIST = (
     "admiration, amusement, anger, annoyance, approval, caring, confusion, "

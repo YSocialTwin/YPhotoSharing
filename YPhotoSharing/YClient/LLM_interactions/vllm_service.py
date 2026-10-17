@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import ray
 
 from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
+from YPhotoSharing import prompt_store
 
 logger = logging.getLogger(__name__)
 
@@ -226,8 +227,12 @@ class VLLMService:
     def generate_caption(self, topic: str, day: int, slot: int,
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         prompt = (
-            f"Write an Instagram caption for a photo about: {topic}. "
-            f"Day {day}, slot {slot}. Max 30 words. Add 2-3 hashtags."
+            prompt_store.prompt(
+                "remote_batch_service__generate_caption__1",
+                topic=topic,
+                day=day,
+                slot=slot,
+            )
         )
         results = self._batch_generate([prompt], method_name="generate_caption")
         return results[0] if results else ""
@@ -235,8 +240,12 @@ class VLLMService:
     def batch_generate_captions(self, requests: List[dict]) -> List[str]:
         prompts = [
             (
-                f"Write an Instagram caption for a photo about: {r.get('topic', 'general')}. "
-                f"Day {r.get('day', 0)}, slot {r.get('slot', 0)}. Max 30 words. Add 2-3 hashtags."
+                prompt_store.prompt(
+                    "remote_batch_service__batch_generate_captions__1",
+                    v1=r.get('topic', 'general'),
+                    v2=r.get('day', 0),
+                    v3=r.get('slot', 0),
+                )
             )
             for r in requests
         ]
@@ -244,8 +253,10 @@ class VLLMService:
 
     def decide_reaction(self, caption: str, cluster_id: int = 0) -> str:
         prompt = (
-            f"Read this Instagram caption and reply ONLY with one word: "
-            f"LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {caption}"
+            prompt_store.prompt(
+                "remote_batch_service__decide_reaction__1",
+                caption=caption,
+            )
         )
         results = self._batch_generate([prompt], method_name="decide_reaction")
         result = results[0].upper() if results else "LIKE"
@@ -255,8 +266,10 @@ class VLLMService:
     def batch_decide_reactions(self, requests: List[dict]) -> List[str]:
         prompts = [
             (
-                f"Read this Instagram caption and reply ONLY with one word: "
-                f"LIKE, LOVE, LAUGH, WOW, SAD, ANGRY, or IGNORE.\n\nCaption: {r.get('caption', '')}"
+                prompt_store.prompt(
+                    "remote_batch_service__batch_decide_reactions__1",
+                    v1=r.get('caption', ''),
+                )
             )
             for r in requests
         ]
@@ -267,9 +280,11 @@ class VLLMService:
     def generate_comment(self, caption: str, author: str,
                          cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         prompt = (
-            f'{author} posted: "{caption}"\n\n'
-            f"Write a brief Instagram comment (under 100 characters). "
-            f"You may @mention the author."
+            prompt_store.prompt(
+                "vllm_service__generate_comment__1",
+                author=author,
+                caption=caption,
+            )
         )
         results = self._batch_generate([prompt], method_name="generate_comment")
         return results[0] if results else ""
@@ -277,8 +292,11 @@ class VLLMService:
     def batch_generate_comments(self, requests: List[dict]) -> List[str]:
         prompts = [
             (
-                f'{r.get("author", "user")} posted: "{r.get("caption", "")}"\n\n'
-                f"Write a brief Instagram comment (under 100 characters)."
+                prompt_store.prompt(
+                    "remote_batch_service__batch_generate_comments__1",
+                    v1=r.get('author', 'user'),
+                    v2=r.get('caption', ''),
+                )
             )
             for r in requests
         ]
@@ -287,9 +305,12 @@ class VLLMService:
     def decide_follow(self, username: str, bio: str, topics: str,
                       cluster_id: int = 0) -> str:
         prompt = (
-            f"Should you follow @{username}?\n"
-            f"Bio: {bio}\nRecent topics: {topics}\n"
-            f"Reply ONLY with: FOLLOW or SKIP."
+            prompt_store.prompt(
+                "remote_batch_service__decide_follow__1",
+                username=username,
+                bio=bio,
+                topics=topics,
+            )
         )
         results = self._batch_generate([prompt], method_name="decide_follow")
         result = results[0].upper() if results else "SKIP"
@@ -312,12 +333,10 @@ class VLLMService:
 
     def extract_emotions(self, text: str) -> List[str]:
         prompt = (
-            "Identify emotions from this text using ONLY GoEmotions labels: "
-            "admiration, amusement, anger, annoyance, approval, caring, confusion, "
-            "curiosity, desire, disappointment, disapproval, disgust, embarrassment, "
-            "excitement, fear, gratitude, grief, joy, love, nervousness, optimism, "
-            "pride, realization, relief, remorse, sadness, surprise, trust.\n\n"
-            f'Text: "{text}"\n\nReturn emotions as a comma-separated list.'
+            prompt_store.prompt(
+                "remote_batch_service__extract_emotions__1",
+                text=text,
+            )
         )
         results = self._batch_generate([prompt], method_name="extract_emotions")
         raw = results[0] if results else ""
