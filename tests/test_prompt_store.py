@@ -204,3 +204,17 @@ def test_persona_context_reads_in_italian_with_localized_profile_values(clean_la
     assert text.startswith("Profilo: 31 anni, uomo, di nazionalità statunitense")
     assert "orientamento politico centrista" in text and "Bio: ciao." in text
     assert "year-old" not in text and "Profile:" not in text
+
+
+def test_single_values_such_as_the_follow_action_are_localized(clean_language, tmp_path):
+    import json
+
+    folder = _run_folder(tmp_path, "it")
+    (folder / "profile_values.it.json").write_text(
+        json.dumps({"action": {"follow": "seguire", "unfollow": "smettere di seguire"}}), encoding="utf-8"
+    )
+    assert ps.localize_value("action", "follow") == "follow"  # English until a language is active
+    ps.use_language_from_folder(folder)
+    assert ps.localize_value("action", "follow") == "seguire"
+    assert ps.localize_value("action", "unknown") == "unknown"
+    assert ps.localize_value("nope", "follow") == "follow"
