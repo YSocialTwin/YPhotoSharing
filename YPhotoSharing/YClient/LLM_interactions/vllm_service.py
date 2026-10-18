@@ -230,8 +230,6 @@ class VLLMService:
             prompt_store.prompt(
                 "remote_batch_service__generate_caption__1",
                 topic=topic,
-                day=day,
-                slot=slot,
             )
         )
         results = self._batch_generate([prompt], method_name="generate_caption")
@@ -243,8 +241,6 @@ class VLLMService:
                 prompt_store.prompt(
                     "remote_batch_service__batch_generate_captions__1",
                     v1=r.get('topic', 'general'),
-                    v2=r.get('day', 0),
-                    v3=r.get('slot', 0),
                 )
             )
             for r in requests
