@@ -11,6 +11,8 @@ from typing import Any, Dict, Iterator, List, Optional
 from sqlalchemy import and_, create_engine, func, or_, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from YPhotoSharing.hashtag_text import normalize_hashtag
+
 from .models import (
     Base,
     Comment,
@@ -258,16 +260,20 @@ class DatabaseMiddleware:
         return True
 
     def add_or_get_hashtag(self, hashtag_text: str) -> str:
-        if hashtag_text in self.hashtags:
-            return self.hashtags[hashtag_text]
+        shown = normalize_hashtag(hashtag_text)
+        if not shown:
+            return None
+        key = shown.casefold()
+        if key in self.hashtags:
+            return self.hashtags[key]
         with self.session_scope() as session:
-            existing = session.query(Hashtag).filter(Hashtag.hashtag == hashtag_text).first()
+            existing = session.query(Hashtag).filter(func.lower(Hashtag.hashtag) == shown.lower()).first()
             if existing is not None:
-                self.hashtags[hashtag_text] = existing.id
+                self.hashtags[key] = existing.id
                 return existing.id
             hashtag_id = str(uuid.uuid4())
-            session.add(Hashtag(id=hashtag_id, hashtag=hashtag_text))
-            self.hashtags[hashtag_text] = hashtag_id
+            session.add(Hashtag(id=hashtag_id, hashtag=shown))
+            self.hashtags[key] = hashtag_id
             return hashtag_id
 
     def add_post_hashtag(self, post_id: str, hashtag_id: str) -> bool:
