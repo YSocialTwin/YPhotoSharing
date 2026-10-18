@@ -289,6 +289,14 @@ class VLLMService:
         results = self._batch_generate([prompt], method_name="generate_comment")
         return results[0] if results else ""
 
+    def generate_share_commentary(self, post_content: str, author_name: str,
+                                  cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
+        prompt = prompt_store.prompt(
+            "ygram_share_commentary", author_name=author_name, post_content=post_content,
+        )
+        results = self._batch_generate([prompt], method_name="generate_share_commentary")
+        return results[0] if results else ""
+
     def batch_generate_comments(self, requests: List[dict]) -> List[str]:
         prompts = [
             (
@@ -320,7 +328,7 @@ class VLLMService:
         if not self.llm_v:
             return ""
         outputs = self.llm_v.generate(
-            [f"Describe this photo: <img {url}>"], self.sampling_params_v
+            [prompt_store.prompt("ygram_describe_photo") + f" <img {url}>"], self.sampling_params_v
         )
         result = outputs[0].outputs[0].text.strip() if outputs else ""
         if self.usage_tracker:

@@ -436,6 +436,9 @@ class Agent:
             stress_reward_system=self.stress_reward_system,
             stress_reward_enabled=self.stress_reward_enabled,
             stress_reward_backward_rounds=self.stress_reward_backward_rounds,
+            llm_service=self.llm_service,
+            agent_attrs=self.user_data,
+            cluster_id=self.cluster_id,
         )
 
     async def _action_report(self, round_id: str) -> Optional[dict]:

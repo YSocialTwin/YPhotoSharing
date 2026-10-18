@@ -1,5 +1,8 @@
 import logging
 
+from YPhotoSharing import prompt_store
+from YPhotoSharing.common_utils import strip_wrapping_quotes
+
 from YPhotoSharing.YClient.actions.dynamics_helpers import (
     build_stress_reward_variations,
     persist_opinion_updates,
@@ -57,7 +60,7 @@ async def reply_comment(
         is_llm_agent = bool((agent_attrs or {}).get("llm", True))
         if is_llm_agent and llm_service and hasattr(llm_service, "generate_comment"):
             reply_body = await llm_service.generate_comment.remote(
-                caption="Replying to comment thread",
+                caption=prompt_store.prompt("ygram_reply_caption"),
                 author="another_user",
                 cluster_id=cluster_id,
                 agent_attrs=None
@@ -74,12 +77,12 @@ async def reply_comment(
         if not photo:
             return False
 
-        annotations = await _build_annotations(reply_body.strip(), agent_attrs, llm_service)
+        annotations = await _build_annotations(strip_wrapping_quotes(reply_body).strip(), agent_attrs, llm_service)
 
         comment_id = await server.post_comment.remote(
             user_id=user_id,
             photo_id=photo_id,
-            body=reply_body,
+            body=strip_wrapping_quotes(reply_body),
             round_id=round_id,
             parent_comment_id=parent_comment_id
         )

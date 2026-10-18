@@ -36,5 +36,14 @@
   "persona_filters": "filtri preferiti: {filters}",
   "persona_story": "visibilità delle storie: {visibility}",
   "persona_tier": "livello creator: {tier}",
-  "persona_photo": "Profilo di condivisione foto: {bits}."
+  "persona_photo": "Profilo di condivisione foto: {bits}.",
+  "ygram_default_persona": "Sei un utente Instagram.",
+  "ygram_mention_author": "Puoi menzionare l'autore (@{author}). ",
+  "ygram_mention_others": "Puoi anche menzionare, se vuoi, questi utenti: {users}",
+  "ygram_mention_users": "Puoi menzionare, se vuoi, questi utenti: {users}",
+  "ygram_memory_note": "[Nota di sistema: {memory_context}]",
+  "ygram_reply_caption": "Risposta a una discussione di commenti",
+  "ygram_dm_caption": "Invio di un messaggio diretto.",
+  "ygram_describe_photo": "Descrivi questa foto:",
+  "ygram_share_commentary": "{author_name} ha pubblicato questo:\n\n\"{post_content}\"\n\nScrivi un breve commento che spieghi perché lo stai ricondividendo. Scrivi SOLO il testo del commento."
 }

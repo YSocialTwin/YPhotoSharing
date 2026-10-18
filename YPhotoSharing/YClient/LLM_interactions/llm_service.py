@@ -327,7 +327,7 @@ class LLMService:
 
     def _get_persona(self, cluster_id: int) -> str:
         personas = self.prompts_config.get("personas", {})
-        return personas.get(str(cluster_id), personas.get("0", "You are an Instagram user."))
+        return personas.get(str(cluster_id), personas.get("0", prompt_store.prompt("ygram_default_persona")))
 
     def _build_persona(self, cluster_id: int, agent_attrs: Optional[dict] = None) -> str:
         persona = self._get_persona(cluster_id)
@@ -347,7 +347,7 @@ class LLMService:
         mention_instruction = ""
         if agent_attrs and "following_usernames" in agent_attrs and agent_attrs["following_usernames"]:
             users = ", ".join([f"@{u}" for u in agent_attrs["following_usernames"]])
-            mention_instruction = f"You may optionally mention these users: {users}"
+            mention_instruction = prompt_store.prompt("ygram_mention_users", users=users)
             
         return self._render("generate_caption", persona=persona, topic=topic,
                             day=day, slot=slot, mention_instruction=mention_instruction)
@@ -369,18 +369,18 @@ class LLMService:
         """Generate a comment on a photo."""
         persona = self._build_persona(cluster_id, agent_attrs)
         
-        mention_instruction = f"You may @mention the author (@{author}). "
+        mention_instruction = prompt_store.prompt("ygram_mention_author", author=author)
         memory_context = ""
         if agent_attrs:
             if agent_attrs.get("following_usernames"):
                 users = ", ".join([f"@{u}" for u in agent_attrs["following_usernames"]])
-                mention_instruction += f"You may also optionally mention these users: {users}"
+                mention_instruction += prompt_store.prompt("ygram_mention_others", users=users)
             if agent_attrs.get("memory_context"):
                 memory_context = agent_attrs["memory_context"]
                 
         # Inject memory context into caption for standard prompt (lazy way since we can't easily alter all prompts_config structures safely without a larger refactor)
         if memory_context:
-            caption = f"{caption}\n\n[System note: {memory_context}]"
+            caption = f"{caption}\n\n" + prompt_store.prompt("ygram_memory_note", memory_context=memory_context)
             
         # If we have an image and a vision model, route to vision
         if image_url and self.llm_v:
@@ -430,6 +430,14 @@ class LLMService:
         return self._render("generate_comment", persona=persona,
                             caption=caption, author=author, 
                             mention_instruction=mention_instruction)
+
+    def generate_share_commentary(self, post_content: str, author_name: str,
+                                  cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
+        """Generate the comment that accompanies a reshared photo (pack key ``generate_share_commentary``)."""
+        persona = self._build_persona(cluster_id, agent_attrs)
+        toxicity = prompt_store.localize_attrs(agent_attrs or {}).get("toxicity") or prompt_store.localize_value("toxicity", "none")
+        return self._render("generate_share_commentary", persona=persona, toxicity=toxicity,
+                            author_name=author_name, post_content=post_content)
 
     def describe_photo(self, url: str) -> str:
         """Generate an alt-text description for a photo URL (requires vision model)."""

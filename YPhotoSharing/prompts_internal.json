@@ -36,5 +36,14 @@
   "persona_filters": "favorite filters: {filters}",
   "persona_story": "story visibility: {visibility}",
   "persona_tier": "creator tier: {tier}",
-  "persona_photo": "Photo-sharing profile: {bits}."
+  "persona_photo": "Photo-sharing profile: {bits}.",
+  "ygram_default_persona": "You are an Instagram user.",
+  "ygram_mention_author": "You may @mention the author (@{author}). ",
+  "ygram_mention_others": "You may also optionally mention these users: {users}",
+  "ygram_mention_users": "You may optionally mention these users: {users}",
+  "ygram_memory_note": "[System note: {memory_context}]",
+  "ygram_reply_caption": "Replying to comment thread",
+  "ygram_dm_caption": "Sending a direct message.",
+  "ygram_describe_photo": "Describe this photo:",
+  "ygram_share_commentary": "{author_name} posted this:\n\n\"{post_content}\"\n\nWrite one brief commentary explaining why you are resharing it. Output ONLY the commentary text."
 }

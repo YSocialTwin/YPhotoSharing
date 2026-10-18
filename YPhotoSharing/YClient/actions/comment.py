@@ -8,6 +8,9 @@ The LLM generates the comment text; the server persists it.
 import logging
 from typing import Optional
 
+from YPhotoSharing import prompt_store
+from YPhotoSharing.common_utils import strip_wrapping_quotes
+
 from YPhotoSharing.YClient.actions.dynamics_helpers import (
     build_memory_context,
     build_stress_reward_variations,
@@ -133,6 +136,7 @@ async def post_comment(
             cluster_id=cluster_id,
         )
 
+    body = strip_wrapping_quotes(body)
     if not body or not body.strip():
         return None
 
