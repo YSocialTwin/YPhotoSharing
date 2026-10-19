@@ -6,5 +6,6 @@
   "authors": [
     "YSocialTwin"
   ],
-  "repository_url": "https://github.com/YSocialTwin/YPhotoSharing"
+  "repository_url": "https://github.com/YSocialTwin/YPhotoSharing",
+  "license": "GPL-3.0-only"
 }
