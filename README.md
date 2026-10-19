@@ -15,6 +15,10 @@ The current implementation has been aligned with the engineering patterns used b
 - client-side round orchestration is split from scheduling helpers
 - annotation toggles are documented for emotion, sentiment, and memory
 
+## Use with YSocial
+
+YPhotoSharing is the photo-sharing runtime of [YSocial](https://github.com/YSocialTwin/YSocial). From the YSocial admin panel it is installed and updated from the *Plugins* page, and photo-sharing experiments (server and clients) are created, started and stopped from the experiment pages; YSocial writes the configuration files and runs `run_server.py` and `run_client.py` for you. The commands below are for running it standalone.
+
 ---
 
 ## 🎯 Key Features
@@ -153,3 +157,9 @@ For the alignment analysis and the phased implementation plan, see [`docs/ysimul
 For logging details and configuration switches, see [`docs/logging.md`](docs/logging.md).
 For annotation configuration details, see [`docs/annotations.md`](docs/annotations.md).
 For recommendation behavior and ranking signals, see [`docs/recommendations.md`](docs/recommendations.md).
+
+---
+
+## License
+
+Released under the GNU General Public License v3.0, see [LICENSE](LICENSE).
