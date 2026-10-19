@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 Changes made since the last published state of `main`, newest first:
 
+- Docs: README citation updated to the published YSocial reference (Big Data & Society, 2026)
 - Hashtags: canonical form without '#', apostrophes and accents kept in the tag, case-insensitive identity
 - Photo: caption prompts no longer mention simulation day and slot
 - Photo: localized in-code prompts, no wrapping quotes, share commentary instead of an identifier
