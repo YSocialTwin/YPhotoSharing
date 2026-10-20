@@ -2,9 +2,10 @@
   "plugin_name": "YPhotoSharing",
   "category": "Simulation Runtime Stack",
   "group": "HPC",
-  "description": "Instagram like photo-sharing simulation runtime for YSocial experiments.",
+  "description": "Simulation runtime for photo-sharing experiments, with an Instagram-like platform.",
   "authors": [
     "YSocialTwin"
   ],
-  "repository_url": "https://github.com/YSocialTwin/YPhotoSharing"
+  "repository_url": "https://github.com/YSocialTwin/YPhotoSharing",
+  "license": "GPL-3.0-only"
 }

@@ -13,6 +13,32 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+_QUOTE_PAIRS = (('"', '"'), ("\u201c", "\u201d"), ("\u00ab", "\u00bb"), ("'", "'"))
+
+
+def strip_wrapping_quotes(text):
+    """Text without the quotation marks a model wraps around a whole reply.
+
+    Only a pair that encloses the entire text is removed (repeatedly, so ``""text""`` works too); quotes
+    inside the text, or a lone quote, are left alone.
+    """
+    if not isinstance(text, str):
+        return text
+    out = text.strip()
+    changed = True
+    while changed and len(out) >= 2:
+        changed = False
+        for opening, closing in _QUOTE_PAIRS:
+            if out.startswith(opening) and out.endswith(closing):
+                core = out
+                while core.startswith(opening) and core.endswith(closing) and len(core) >= 2:
+                    core = core[len(opening):-len(closing)]
+                if opening not in core and closing not in core:
+                    out = core.strip()
+                    changed = True
+                    break
+    return out
+
 
 def validate_config_directory(config_path: str, required_files: list = None) -> Path:
     """

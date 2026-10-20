@@ -9,6 +9,8 @@ import random
 import uuid
 from typing import Optional
 
+from YPhotoSharing.common_utils import strip_wrapping_quotes
+
 from YPhotoSharing.YClient.actions.dynamics_helpers import (
     build_stress_reward_variations,
     persist_stress_reward_variations,
@@ -24,6 +26,9 @@ async def share_photo(
     stress_reward_system=None,
     stress_reward_enabled: bool = False,
     stress_reward_backward_rounds: int = 24,
+    llm_service=None,
+    agent_attrs: Optional[dict] = None,
+    cluster_id: int = 0,
 ) -> Optional[dict]:
     """
     Share a recommended photo.
@@ -57,12 +62,34 @@ async def share_photo(
         except Exception:
             parent_topic_ids = []
             
+        # The comment that goes with the repost: written by the agent, never an identifier. Without an LLM
+        # (or when the call fails) the repost carries no text; the frontend still links the original photo.
+        caption = ""
+        if llm_service is not None and (agent_attrs or {}).get("llm", True):
+            try:
+                author_name = str(parent_photo.get("user_id"))
+                try:
+                    author = await server.get_user.remote(parent_photo.get("user_id"))
+                    author_name = (author or {}).get("username") or author_name
+                except Exception:
+                    pass
+                caption = await llm_service.generate_share_commentary.remote(
+                    post_content=parent_photo.get("caption") or "",
+                    author_name=author_name,
+                    cluster_id=cluster_id,
+                    agent_attrs=agent_attrs,
+                )
+                caption = strip_wrapping_quotes(caption) or ""
+            except Exception as exc:
+                logger.warning(f"Share commentary failed for user {user_id}: {exc}")
+                caption = ""
+
         photo_data = {
             "id": str(uuid.uuid4()),
             "user_id": user_id,
             "round": round_id,
             "image_url": parent_photo.get("image_url"),
-            "caption": f"Shared from {parent_photo.get('user_id')}",
+            "caption": caption,
             "parent_photo_id": photo_id,
             "filter_name": parent_photo.get("filter_name"),
             "location_name": parent_photo.get("location_name"),

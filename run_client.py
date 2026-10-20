@@ -99,7 +99,11 @@ def main():
     if ray_config_file.exists() and address == "auto":
         address = ray_config_file.read_text().strip()
 
-    ray.init(address=address, namespace=namespace, include_dashboard=False)
+    from YPhotoSharing import prompt_store
+
+    prompt_language = prompt_store.use_language_from_folder(config_dir)
+    ray_env = {"runtime_env": {"env_vars": prompt_store.env_for_workers()}} if prompt_store.env_for_workers() else {}
+    ray.init(address=address, namespace=namespace, include_dashboard=False, **ray_env)
     print(f"--- 🔗 Connected to Ray cluster ---")
 
     server_name = config.get("server_name", "Orchestrator")

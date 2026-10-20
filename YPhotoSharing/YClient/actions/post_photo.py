@@ -9,6 +9,8 @@ import logging
 import uuid
 from typing import Any, Dict, Optional
 
+from YPhotoSharing.common_utils import strip_wrapping_quotes
+
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_caption
 from YPhotoSharing.YClient.text_processing import annotate_content
@@ -102,6 +104,7 @@ async def post_photo(
                 cluster_id=cluster_id,
                 agent_attrs=agent_attrs,
             )
+            caption = strip_wrapping_quotes(caption)
         except Exception as exc:
             logger.warning(f"Caption generation failed for user {user_id}: {exc}")
             caption = f"#{topic}"

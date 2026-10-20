@@ -1,5 +1,8 @@
 import logging
 
+from YPhotoSharing import prompt_store
+from YPhotoSharing.common_utils import strip_wrapping_quotes
+
 from YPhotoSharing.YClient.actions.dynamics_helpers import (
     build_memory_context,
     record_memory_event,
@@ -39,11 +42,12 @@ async def send_dm(
 
         if agent_attrs.get("llm", True):
             content = await llm_service.generate_comment.remote(
-                caption="Sending a direct message.",
+                caption=prompt_store.prompt("ygram_dm_caption"),
                 author="another_user",
                 cluster_id=cluster_id,
                 agent_attrs=agent_attrs
             )
+            content = strip_wrapping_quotes(content)
         else:
             content = generate_rule_based_comment(
                 caption="Sending a direct message.",
