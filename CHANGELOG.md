@@ -4,22 +4,27 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
-Changes made since the last published state of `main`, newest first:
+## [2.1.0] - 2026-10-20
 
-- Docs: README citation updated to the published YSocial reference (Big Data & Society, 2026)
-- Hashtags: canonical form without '#', apostrophes and accents kept in the tag, case-insensitive identity
-- Photo: caption prompts no longer mention simulation day and slot
-- Photo: localized in-code prompts, no wrapping quotes, share commentary instead of an identifier
-- Prompts i18n step 5: localize the follow action and the reciprocal-follow verb
-- Prompts i18n step 5: move the remaining English persona fragments into the packs
-- Prompts i18n step 5: run_client activates the prompt language (Ray workers too)
-- Prompts i18n step 4: Italian internal prompt pack
-- Prompts i18n step 3: prompt_store language support
-- Prompts i18n: remove unused protocol_tokens copy
-- Prompts i18n step 2: renderer update
-- Prompts i18n step 1: move in-code prompts to prompts_internal.json
-- i18n: shorter, purpose-oriented plugin descriptions
-- Keep the local image generation dependencies in requirements.txt
-- Align requirements with the library versions shipped by YWeb
-- update .gitignore
-- deps: bump SQLAlchemy>=2.0, langchain>=0.3
+### Added
+- Hashtags in canonical form: no leading `#`, apostrophes and accents kept, case-insensitive identity.
+- Localized in-code prompts for photos, without wrapping quotes; a shared photo is commented instead of quoting an identifier.
+- The prompt language is active in `run_client`, Ray workers included.
+- Prompts i18n: prompts moved out of the code into `prompts_internal.json`, read through `prompt_store` with language support.
+- Prompts i18n: protocol tokens and tolerant parsers (no `eval`); Italian internal prompt pack.
+- Prompts i18n: localized follow action and reciprocal-follow verb; persona fragments moved into the packs.
+
+### Changed
+- Dependencies aligned with YWeb (SQLAlchemy >= 2.0, langchain >= 0.3); the local image generation dependencies stay in `requirements.txt`.
+- Shorter, purpose-oriented plugin description in `meta/info.json`.
+- License: GPL-3.0-only (`LICENSE` added, `meta/info.json`, README).
+- README restructured on the common layout; citation updated to the published YSocial reference (Big Data & Society, 2026).
+
+### Removed
+- Unused copy of `protocol_tokens`.
+
+### Fixed
+- Caption prompts no longer mention the simulation day and slot.
+
+[Unreleased]: https://github.com/YSocialTwin/YPhotoSharing/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/YSocialTwin/YPhotoSharing/releases/tag/v2.1.0
