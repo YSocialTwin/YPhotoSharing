@@ -143,12 +143,13 @@ async def post_photo(
         "topic": topic,
         "topics": [topic],
     }
-    annotations = await _build_annotations(caption, agent_attrs, llm_service)
-
     try:
+        # The photo is published first: the annotations (an LLM call for the emotions) can be slow and
+        # are attached afterwards, so a slow annotation never delays or loses the post.
         photo_id = await server.post_photo.remote(photo_data)
 
         try:
+            annotations = await _build_annotations(caption, agent_attrs, llm_service)
             topic_ids = []
             if getattr(server, "get_photo_topics", None) is not None:
                 topic_ids = await server.get_photo_topics.remote(photo_id)
