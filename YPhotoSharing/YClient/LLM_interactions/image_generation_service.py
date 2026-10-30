@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import random
 import base64
@@ -16,6 +17,7 @@ class ImageGenerationService:
         self.use_local_diffusion = use_local_diffusion
         self.local_diffusion_model = local_diffusion_model
         self.pipe = None
+        self._gen_lock = asyncio.Lock()
         
         logger.info(f"ImageGenerationService initialized with endpoint: {endpoint_url}, local_diffusion: {use_local_diffusion}, model: {local_diffusion_model}")
         
@@ -54,9 +56,12 @@ class ImageGenerationService:
             logger.debug(f"Locally generating image for topic '{topic}'...")
             try:
                 prompt = f"A photo about {topic}, {caption[:100]}"
-                # Run sync generation in a way that doesn't fully block if possible, 
-                # but for this script we just call it.
-                image = self.pipe(prompt, num_inference_steps=20).images[0]
+                # The diffusion pipeline is synchronous and takes seconds: run it in a worker thread so the
+                # event loop (LLM calls, server requests of the other agents) is not frozen meanwhile.
+                # one generation at a time: the pipeline is not safe to share between threads
+                async with self._gen_lock:
+                    result = await asyncio.to_thread(self.pipe, prompt, num_inference_steps=20)
+                image = result.images[0]
                 
                 buffered = BytesIO()
                 image.save(buffered, format="JPEG")
