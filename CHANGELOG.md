@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- Federation exposures (F4.4b, opt-in `federation.exposures`): with `federation.exposures` the adapter also hands `exposure.v1` to the bus: recommended photos that are materialised cross-posts are views (approximate), reactions and comments are interactions (exact); tie from the follow table; table `federation_exposure_log`, fixed per tick.
 - Federation attention (opt-in): `apply_attention` stores the multiplier of the day per account (table `federation_attention`); `get_federation_attention` serves it and the round planner scales the chance that an agent acts in a round; with the federation off or multiplier 1 nothing changes.
 - Federation affective report (opt-in): `affective_report(day)` of the adapter gives the native stress/reward of the active accounts at the end of the day, read from the runtime's own tables without writing.
 - Federation (opt-in): `YPhotoSharing/YServer/federation/` (adapter `photo_sharing`, gate wrapper); the server advances a round only when the coordinator allows it, and the client waits for the round by polling `round_pending`. Enabled by the `federation` section of the server configuration; standalone behaviour is unchanged.

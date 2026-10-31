@@ -50,6 +50,20 @@ class FederationAttention(Base):
     multiplier = Column(Float, nullable=False)
 
 
+class FederationExposure(Base):
+    """exposure.v1 handed to the bus for a tick (F4.4b), fixed on the first export so that a retry sends the same messages."""
+
+    __tablename__ = "federation_exposure_log"
+
+    tick = Column(Integer, primary_key=True)
+    seq = Column(Integer, primary_key=True)
+    viewer_uid = Column(String(36), nullable=False)
+    source_ref = Column(Text, nullable=False)
+    kind = Column(String(10), nullable=False)
+    tie = Column(String(10), nullable=False)
+    exact = Column(Integer, nullable=False)
+
+
 class FederationState(Base):
     __tablename__ = "federation_state"
 
@@ -58,5 +72,5 @@ class FederationState(Base):
 
 
 def ensure_tables(engine):
-    """CREATE TABLE IF NOT EXISTS for the five tables."""
+    """CREATE TABLE IF NOT EXISTS for the tables."""
     Base.metadata.create_all(engine, checkfirst=True)

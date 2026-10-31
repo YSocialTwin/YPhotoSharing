@@ -327,3 +327,30 @@ def test_client_attention_changes_who_acts_with_its_own_generator():
     client_fed.install({})  # off: identity, nobody is held back and the generator is not used
     random.seed(11)
     assert acting(SimulationRoundPlanner({"activity_profiles": {"p": list(range(24))}}), True) == {"a": 200, "b": 200, "c": 200}
+
+
+def test_exposures_with_materialised_photos_are_emitted_only_when_asked_and_stay_the_same_on_retry(host):
+    import json
+
+    from YPhotoSharing.YServer.classes.models import Comment, Follow, Reaction, Recommendation
+
+    a = adapter_for(host, emit_exposures=True)
+    assert a.ingest_inbox(0, [crosspost(0, U[1], "from the forum")]).materialized == 1
+    rnd = host.current_round_id
+    with Session(host._db.engine) as s:
+        ref = s.scalar(select(FederationRef.local_id).where(FederationRef.local_kind == "photo"))
+        for i, (u, f) in enumerate(((2, 1), (3, 1), (1, 3))):
+            s.add(Follow(id=f"f{i}", user_id=U[u], follower_id=U[f], action="follow", round=rnd))
+        s.add(Recommendation(id="c2", user_id=U[2], photo_ids=json.dumps([ref, "other"]), round=rnd))
+        s.add(Recommendation(id="c1", user_id=U[1], photo_ids=json.dumps([ref]), round=rnd))  # the author: not a viewer
+        s.add(Recommendation(id="c3", user_id=U[3], photo_ids=json.dumps(["other"]), round=rnd))
+        s.add(Comment(id="k1", photo_id=ref, user_id=U[3], body="nice", round=rnd))
+        s.commit()
+    out = [e for e in a.export_outbox(0) if e.payload_type == "exposure.v1"]
+    got = [(e.payload["viewer_global_agent_id"], e.payload["kind"], e.payload["tie"], e.payload["exact"]) for e in out]
+    assert got == [("g2", "view", "follow", False), ("g3", "interact", "mutual", True)]
+    assert all(e.payload["source_ref"] == "ysocial://1/forum/post/0" and e.payload["tick"] == 0 for e in out)
+    assert [e.fed_msg_id for e in a.export_outbox(0) if e.payload_type == "exposure.v1"] == [e.fed_msg_id for e in out]
+    assert a.export_outbox(1) == []
+    off = adapter_for(host)
+    assert off.emit_exposures is False and [e for e in off.export_outbox(0) if e.payload_type == "exposure.v1"] == []

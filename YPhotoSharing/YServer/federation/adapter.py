@@ -32,7 +32,7 @@ log = logging.getLogger("yphotosharing.federation")
 class YPhotoSharingAdapter(PlatformAdapter):
     platform = "photo_sharing"
 
-    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked"):
+    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False):
         """accounts: {global_agent_id: local user id}; without an entry the global id is the local user id."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
@@ -40,6 +40,7 @@ class YPhotoSharingAdapter(PlatformAdapter):
         self.federation_id = federation_id
         self.host = host
         self.export_policy = export_policy
+        self.emit_exposures = bool(emit_exposures)
         self._accounts = {str(k): str(v) for k, v in (accounts or {}).items()}
         self._by_user = {v: k for k, v in self._accounts.items()}
         self._lock = threading.RLock()
@@ -170,7 +171,70 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 photo = s.get(Photo, row.photo_id)
                 out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, row.seq, "content.v1",
                                            self._content(s, photo)))
+            if self.emit_exposures:
+                for row in self._exposure_rows(s, tick):
+                    out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, len(out), "exposure.v1", {
+                        "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
+                        "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
             return out
+
+    def _tie(self, s, viewer, author):
+        """none / follow / mutual between a viewer and the author of a photo, from the latest follow rows."""
+        from YPhotoSharing.YServer.classes.models import Follow, Round
+
+        def follows(a, b):
+            row = s.execute(select(Follow, Round).outerjoin(Round, Round.id == Follow.round).where(
+                Follow.user_id == a, Follow.follower_id == b).order_by(Round.day.desc(), Round.hour.desc())).first()
+            return row is not None and row[0].action == "follow"
+        if not follows(viewer, author):
+            return "none"
+        return "mutual" if follows(author, viewer) else "follow"
+
+    def _exposure_rows(self, s, tick):
+        """Views (photos recommended in the round: approximate, exact = false) and interactions (reaction or comment:
+        exact) of active accounts with the materialised cross-posts of the round of the tick, in a stable order."""
+        import json
+
+        from YPhotoSharing.YServer.classes.models import Comment, Photo, Reaction, Recommendation, Round
+        from .tables import FederationExposure, FederationRef, FederationState
+
+        def stored():
+            return list(s.scalars(select(FederationExposure).where(FederationExposure.tick == tick).order_by(FederationExposure.seq)).all())
+        done = s.get(FederationState, "exposure_tick")
+        if done is not None and int(done.value) >= tick:
+            return stored()
+        day, hour = self.from_tick(tick)
+        rnd = s.scalars(select(Round).where(Round.day == day, Round.hour == hour)).first()
+        refs = {r.local_id: r.source_ref for r in s.scalars(select(FederationRef).where(FederationRef.local_kind == "photo")).all()} if rnd else {}
+        if refs:
+            author = {pid: uid for pid, uid in s.execute(select(Photo.id, Photo.user_id).where(Photo.id.in_(list(refs)))).all()}
+            found = {}
+
+            def add(viewer, pid, kind, exact):
+                if viewer is None or viewer == author.get(pid) or not self._active(s, viewer):
+                    return
+                found.setdefault((str(viewer), refs[pid], kind), (pid, exact))
+            for rec in s.scalars(select(Recommendation).where(Recommendation.round == rnd.id)).all():
+                try:
+                    ids = json.loads(rec.photo_ids or "[]")
+                except ValueError:
+                    ids = (rec.photo_ids or "").split(",")
+                for raw in ids:
+                    if str(raw).strip() in refs:
+                        add(rec.user_id, str(raw).strip(), "view", False)
+            for r in s.scalars(select(Reaction).where(Reaction.round == rnd.id, Reaction.photo_id.in_(list(refs)))).all():
+                add(r.user_id, r.photo_id, "interact", True)
+            for c in s.scalars(select(Comment).where(Comment.round == rnd.id, Comment.photo_id.in_(list(refs)))).all():
+                add(c.user_id, c.photo_id, "interact", True)
+            for seq, ((viewer, ref, kind), (pid, exact)) in enumerate(sorted(found.items())):
+                s.add(FederationExposure(tick=tick, seq=seq, viewer_uid=viewer, source_ref=ref, kind=kind,
+                                         tie=self._tie(s, viewer, author[pid]), exact=int(exact)))
+        if done is None:
+            s.add(FederationState(key="exposure_tick", value=str(tick)))
+        else:
+            done.value = str(tick)
+        s.commit()
+        return stored()
 
     def mark_for_export(self, photo_id):
         """The agent chose to cross-post this photo (D-07): it will be exported at the next barrier."""

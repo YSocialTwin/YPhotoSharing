@@ -24,7 +24,8 @@ def build_gate(server, config):
     section.setdefault("exp_id", os.path.basename(str(server.config_path)) or None)
     adapter = YPhotoSharingAdapter(section["member"], int(section.get("federation_id", 1)), host=server,
                                    accounts=section.get("accounts"),
-                                   export_policy=section.get("export_policy", "marked"))
+                                   export_policy=section.get("export_policy", "marked"),
+                                   emit_exposures=bool(section.get("exposures", False)))
     server._federation_adapter = adapter
     gate = SafeGate(FederationGate(adapter, section))
     gate.start((server._current_day, server._current_hour))
