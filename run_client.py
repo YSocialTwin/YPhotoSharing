@@ -231,6 +231,7 @@ def main():
         }
     )
     _write_state(state_path, state)
+    ray.get(client_actor.finish.remote())
     print("--- ✅ Simulation complete ---")
     ray.shutdown()
 

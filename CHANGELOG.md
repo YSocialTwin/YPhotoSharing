@@ -4,6 +4,9 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+- Federation (opt-in): `YPhotoSharing/YServer/federation/` (adapter `photo_sharing`, gate wrapper); the server advances a round only when the coordinator allows it, and the client waits for the round by polling `round_pending`. Enabled by the `federation` section of the server configuration; standalone behaviour is unchanged.
+
 ## [2.1.0] - 2026-10-20
 
 ### Added

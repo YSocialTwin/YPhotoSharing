@@ -202,6 +202,15 @@ class OrchestratorServer:
             perspective_api_key=self.simulation.get("perspective_api_key"),
         )
 
+        # Federation (opt-in): None means standalone, exactly as before.
+        self._federation_gate = None
+        self._advance_pending = False  # the gate held the round back; the clients poll round_pending()
+        self._finished_clients = set()
+        if (self.config.get("federation") or {}).get("enabled"):
+            from YPhotoSharing.YServer.federation import build_gate
+
+            self._federation_gate = build_gate(self, self.config)
+
         logger.info(f"OrchestratorServer '{server_name}' ready (run_id={self._run_id})")
 
     def register_client(self, client_id: str, client_info: dict) -> dict:
@@ -219,6 +228,7 @@ class OrchestratorServer:
             "simulation_config": self.simulation,
             "current_day": self._current_day,
             "current_hour": self._current_hour,
+            "federated": self._federation_gate is not None,
         }
 
     def heartbeat(self, client_id: str) -> dict:
@@ -239,9 +249,34 @@ class OrchestratorServer:
         self._round_ready[client_id] = True
         all_ready = all(self._round_ready.get(cid, False) for cid in self._registered_clients)
         if all_ready and len(self._registered_clients) >= self.min_to_start:
-            self._advance_round()
-            self._round_ready = {}
+            self._try_advance()
         return all_ready
+
+    def _try_advance(self) -> None:
+        """Advance when every client is ready; with a federation gate also when the coordinator allows it."""
+        gate = self._federation_gate
+        if gate is not None and not gate.on_barrier_ready((self._current_day, self._current_hour)):
+            self._advance_pending = True
+            return
+        self._advance_pending = False
+        self._advance_round()
+        self._round_ready = {}
+        if gate is not None:
+            gate.on_round_opened((self._current_day, self._current_hour))
+
+    def round_pending(self) -> bool:
+        """True while the federation gate holds the round back (always False standalone). Asking again retries
+        the advance: the clients wait for the round by polling this."""
+        if self._advance_pending:
+            self._try_advance()
+        return self._advance_pending
+
+    def finish_client(self, client_id: str) -> bool:
+        """A client has played all its rounds; when every client has, the federation is told this member is done."""
+        self._finished_clients.add(client_id)
+        if self._federation_gate is not None and self._finished_clients >= set(self._registered_clients):
+            self._federation_gate.on_finished()
+        return True
 
     def _advance_round(self):
         self._current_hour += 1

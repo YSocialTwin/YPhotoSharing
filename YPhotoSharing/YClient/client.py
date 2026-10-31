@@ -234,6 +234,7 @@ class SimulationClient:
         self._current_day = server_meta["current_day"]
         self._current_hour = server_meta["current_hour"]
         self._run_id = server_meta.get("run_id", str(uuid.uuid4()))
+        self._federated = bool(server_meta.get("federated", False))
         logger.info(f"Client {self.client_id} registered. Server run_id={self._run_id}")
 
     async def load_agents(self, user_configs) -> int:
@@ -443,7 +444,19 @@ class SimulationClient:
             )
 
         await self.server.ready_for_next_round.remote(self.client_id)
+        if getattr(self, "_federated", False):
+            await self._wait_for_round_open()
         return summary
+
+    async def _wait_for_round_open(self, poll_seconds: float = 0.05) -> None:
+        """Federation: the next round opens only when the coordinator allows it (the clock of the other platforms)."""
+        while await self.server.round_pending.remote():
+            await asyncio.sleep(poll_seconds)
+
+    async def finish(self) -> None:
+        """Tell the server this client has played all its rounds (only matters in a federation)."""
+        if getattr(self, "_federated", False):
+            await self.server.finish_client.remote(self.client_id)
 
     async def _run_agents_async(self, day: int, hour: int, round_id: str) -> List[list]:
         active_agents = self.round_planner.select_active_agents(self._agents, hour)
