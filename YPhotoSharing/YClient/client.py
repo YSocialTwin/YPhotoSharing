@@ -23,6 +23,7 @@ import ray
 
 from YPhotoSharing.common_utils import build_structured_file_logger, setup_logging
 from YPhotoSharing.YClient.agent_management.agent import Agent
+from YPhotoSharing.YClient import federation as _federation
 from YPhotoSharing.YClient.simulation.bootstrap import (
     build_initial_interest_ids,
     normalize_agent_config,
@@ -129,6 +130,7 @@ class SimulationClient:
         self._current_hour = 0
         self._run_id = str(uuid.uuid4())
         self.round_planner = SimulationRoundPlanner(self.simulation_config)
+        _federation.install(self.simulation_config)
         self.lifecycle_manager = None
 
         global logger
@@ -362,6 +364,8 @@ class SimulationClient:
     async def run_round(self, day: int, hour: int) -> dict:
         round_id = await self.server.get_or_create_round.remote(day, hour)
         self._round_count += 1
+        if _federation.enabled():  # accounts that are not active on this platform do not act in this round
+            self.round_planner.excluded_ids = await _federation.inactive_ids(self.server)
 
         start_time = time.time()
         all_results = await self._run_agents_async(day, hour, round_id)

@@ -204,6 +204,7 @@ class OrchestratorServer:
 
         # Federation (opt-in): None means standalone, exactly as before.
         self._federation_gate = None
+        self._federation_adapter = None  # set by build_gate; the invisibility filters below read it
         self._advance_pending = False  # the gate held the round back; the clients poll round_pending()
         self._finished_clients = set()
         if (self.config.get("federation") or {}).get("enabled"):
@@ -352,7 +353,14 @@ class OrchestratorServer:
         return self._db.get_following(user_id)
 
     def post_photo(self, photo_data: dict) -> str:
-        return self.social_action_service.post_photo(photo_data)
+        crosspost = False
+        if "crosspost" in photo_data:  # the agent's choice to cross-post (federation, D-07); not a column
+            photo_data = dict(photo_data)
+            crosspost = bool(photo_data.pop("crosspost"))
+        photo_id = self.social_action_service.post_photo(photo_data)
+        if crosspost and self._federation_adapter is not None:
+            self._federation_adapter.mark_for_export(photo_id)
+        return photo_id
 
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
         return self.social_action_service.add_photo_emotion(photo_id, emotion)
@@ -368,7 +376,10 @@ class OrchestratorServer:
         return self._db.get_topic_name_from_id(topic_id)
 
     def get_user_photos(self, user_id: str, limit: int = 20, offset: int = 0) -> List[dict]:
-        return self.social_action_service.get_user_photos(user_id, limit=limit, offset=offset)
+        photos = self.social_action_service.get_user_photos(user_id, limit=limit, offset=offset)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            photos = self._federation_adapter.filter_photos(photos)
+        return photos
 
     def delete_photo(self, photo_id: str) -> bool:
         return self.social_action_service.delete_photo(photo_id)
@@ -394,19 +405,37 @@ class OrchestratorServer:
         return self.social_action_service.view_story(story_id, viewer_id)
 
     def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
-        return self.social_action_service.get_recent_stories(user_id, limit)
+        stories = self.social_action_service.get_recent_stories(user_id, limit)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            stories = self._federation_adapter.filter_photos(stories)
+        return stories
 
     def get_home_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            # accounts that are not active are invisible: take more candidates, then cut
+            return self._federation_adapter.filter_photos(self._db.get_home_feed(user_id, limit=limit * 2))[:limit]
         return self._db.get_home_feed(user_id, limit=limit)
 
     def set_recommendation(self, user_id: str, photo_ids: List[str], round_id: str) -> str:
         return self._db.add_recommendation(user_id, photo_ids, round_id)
 
     def get_recommendation(self, user_id: str, round_id: str) -> Optional[List[str]]:
-        return self._db.get_recommendation(user_id, round_id)
+        ids = self._db.get_recommendation(user_id, round_id)
+        if ids and self._federation_adapter is not None:  # accounts that are not active are invisible
+            ids = self._federation_adapter.filter_photo_ids(ids)
+        return ids
 
     def get_follow_recommendations(self, user_id: str, limit: int = 5) -> List[str]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            found = self.follow_recsys.recommend_users_to_follow(user_id, limit * 2)
+            return self._federation_adapter.filter_users(found)[:limit]  # accounts that are not active are invisible
         return self.follow_recsys.recommend_users_to_follow(user_id, limit)
+
+    def get_federation_inactive_agents(self) -> List[str]:
+        """Local ids of the accounts that are not active on this platform (federation); [] standalone."""
+        if self._federation_adapter is None:
+            return []
+        return sorted(self._federation_adapter.inactive_agent_ids())
 
     def report_content(self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str):
         return self.social_action_service.add_report(reporter_id, content_id, content_type, reason, round_id)
@@ -433,9 +462,13 @@ class OrchestratorServer:
         return self.social_action_service.get_dms(user_id, limit)
 
     def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            return self._federation_adapter.filter_photos(self._db.get_explore_feed(user_id, limit * 2))[:limit]
         return self._db.get_explore_feed(user_id, limit)
 
     def get_hashtag_feed(self, hashtag: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            return self._federation_adapter.filter_photos(self._db.get_hashtag_feed(hashtag, limit * 2))[:limit]
         return self._db.get_hashtag_feed(hashtag, limit)
 
     def save_media(self, content_base64: str, extension: str = "jpg") -> str:

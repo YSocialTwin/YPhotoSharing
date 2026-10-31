@@ -14,6 +14,7 @@ from YPhotoSharing.common_utils import strip_wrapping_quotes
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_caption
 from YPhotoSharing.YClient.text_processing import annotate_content
+from YPhotoSharing.YClient import federation as _federation
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,7 @@ async def post_photo(
         "location_name": location_name,
         "topic": topic,
         "topics": [topic],
+        **_federation.post_fields(),  # {} unless the federation is on and the agent chose to cross-post
     }
     try:
         # The photo is published first: the annotations (an LLM call for the emotions) can be slow and

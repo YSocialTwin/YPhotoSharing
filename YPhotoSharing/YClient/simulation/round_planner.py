@@ -52,8 +52,11 @@ class SimulationRoundPlanner:
         hourly_activity = self.simulation_config.get("hourly_activity", {})
 
         active_agents = []
+        excluded = getattr(self, "excluded_ids", ())  # accounts not active on this platform (federation)
         for agent in agents:
             user_data = getattr(agent, "user_data", {}) or {}
+            if excluded and str(user_data.get("id")) in excluded:
+                continue
             if user_data.get("is_churned") or user_data.get("left_on") is not None:
                 continue
             daily_activity_level = int(user_data.get("daily_activity_level", 1) or 1)
