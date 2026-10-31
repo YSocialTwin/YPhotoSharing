@@ -258,3 +258,31 @@ def test_crosspost_choice_is_a_seeded_draw_with_its_own_generator():
     client_fed.install({"federation": {"enabled": True}})
     assert client_fed.post_fields() == {}
     client_fed.install({})
+
+
+def test_affective_report_equals_what_the_runtime_computes(host):
+    from YPhotoSharing.YServer.classes.models import Recommendation
+
+    a = adapter_for(host)
+    a.apply_membership([MembershipChange("g1", "active", 0, "initial"), MembershipChange("g2", "active", 0, "initial"),
+                        MembershipChange("g3", "dormant", 0, "initial")])
+    db = host._db
+    r0 = host.current_round_id
+    r1 = db.get_or_create_round(0, 1)
+    r_next = db.get_or_create_round(1, 0)
+    new_photo(host, 1, "one")
+    db.set_stress_reward_variations(U[1], r1, [{"variable": "stress", "value": 0.3}, {"variable": "stress", "value": 0.1},
+                                               {"variable": "reward", "value": 0.8}, {"variable": "reward", "value": 0.5}])
+    db.set_stress_reward_variations(U[1], r_next, [{"variable": "stress", "value": 0.5}])  # next day: not in the report of day 0
+    db.add_reaction(U[1], new_photo(host, 2, "two"), "LIKE", r0)
+    with Session(db.engine) as s:
+        s.add(Recommendation(id="rec1", user_id=U[1], photo_ids='["a", "b", "c"]', round=r0))
+        s.commit()
+    samples = {x.global_agent_id: x for x in a.affective_report(0)}
+    assert set(samples) == {"g1", "g2"}
+    native = db.get_stress_reward(U[1], r1)  # the server's own computation at the last round of the day
+    assert (samples["g1"].stress, samples["g1"].reward) == (pytest.approx(native["stress"]), pytest.approx(native["reward"]))
+    assert (samples["g1"].stress, samples["g1"].reward) == (pytest.approx(0.4), 1.0)
+    assert samples["g1"].actions == 2 and samples["g1"].exposures == 3
+    assert (samples["g2"].stress, samples["g2"].reward, samples["g2"].actions) == (0.0, 0.0, 1)
+    assert a.affective_report(9) == []

@@ -9,7 +9,7 @@ Bus and membership (F3.4d), same design as the other runtimes:
   photo of active authors in the current round with export_policy = "all", into content.v1 (kind "photo").
 - ingest_inbox materialises crosspost.v1 as a photo of the author, once per fed_msg_id (INV-05), with a federation_ref
   row. A photo needs its image: a cross-post without image_ref is skipped (skipped_no_image).
-Attention and affective reports are filled in by F4.
+Affective report (F4.1): native stress/reward of the server. Attention: F4.3.
 
 `host` is the object that owns the database: it needs `_db` (with `engine` and `get_or_create_round`) and
 `current_round_id` (the OrchestratorServer; a small stand-in in tests)."""
@@ -222,7 +222,40 @@ class YPhotoSharingAdapter(PlatformAdapter):
         return report
 
     def affective_report(self, day):
-        return []  # F4
+        """Native stress/reward of the active accounts at the last round of the canonical day (F4.1): the value of the
+        server's own computation (DatabaseMiddleware._compute_stress_reward_aggregate, the one get_stress_reward uses),
+        read without writing; actions = photos and reactions of the account in the day, exposures = photos recommended."""
+        import json
+
+        from sqlalchemy import func
+
+        from YPhotoSharing.YServer.classes.models import Photo, Reaction, Recommendation, Round
+        from ysocial_federation.schemas import AffectiveSample
+        from .tables import FederationMembership
+
+        with self._lock, self._session() as s:
+            rounds = s.scalars(select(Round).where(Round.day == int(day)).order_by(Round.hour)).all()
+            if not rounds:
+                return []
+            ids = [r.id for r in rounds]
+            last = ids[-1]
+            out = []
+            for m in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")
+                               .order_by(FederationMembership.user_id)).all():
+                uid = m.user_id
+                agg = self.host._db._compute_stress_reward_aggregate(s, uid, last, 24)
+                photos = s.scalar(select(func.count(Photo.id)).where(Photo.user_id == uid, Photo.round.in_(ids)))
+                reacts = s.scalar(select(func.count(Reaction.id)).where(Reaction.user_id == uid, Reaction.round.in_(ids)))
+                exposures = 0
+                for rec in s.scalars(select(Recommendation).where(Recommendation.user_id == uid,
+                                                                  Recommendation.round.in_(ids))).all():
+                    try:
+                        exposures += len(json.loads(rec.photo_ids or "[]"))
+                    except ValueError:
+                        exposures += len([p for p in (rec.photo_ids or "").split(",") if p.strip()])
+                out.append(AffectiveSample(self.agent_of(uid), int(day), float(agg.get("stress", 0.0)),
+                                           float(agg.get("reward", 0.0)), int(photos or 0) + int(reacts or 0), exposures))
+            return out
 
     def apply_attention(self, day, multipliers):
         return None  # F4
