@@ -321,6 +321,21 @@ class YPhotoSharingAdapter(PlatformAdapter):
                                            float(agg.get("reward", 0.0)), int(photos or 0) + int(reacts or 0), exposures))
             return out
 
+    def churned_agents(self, day):
+        """Agents of this platform that left on their own (users.left_on set at a round up to the end of the day, F4.5): the
+        coordinator records them as left with reason churn. Only accounts the federation still sees as active."""
+        from YPhotoSharing.YServer.classes.models import Round, User_mgmt
+        from .tables import FederationMembership
+
+        with self._lock, self._session() as s:
+            rounds = set(s.scalars(select(Round.id).where(Round.day <= int(day))).all())
+            out = []
+            for row in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")).all():
+                user = s.get(User_mgmt, row.user_id)
+                if user is not None and user.left_on is not None and user.left_on in rounds:
+                    out.append(row.global_agent_id)
+            return sorted(out)
+
     def apply_attention(self, day, multipliers):
         """Store the multipliers of the day (F4.3): accounts that are not in the dictionary go back to 1; unknown agents are
         ignored. The client reads them with server.get_federation_attention and the round planner scales the chance that an

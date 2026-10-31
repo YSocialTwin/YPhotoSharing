@@ -354,3 +354,15 @@ def test_exposures_with_materialised_photos_are_emitted_only_when_asked_and_stay
     assert a.export_outbox(1) == []
     off = adapter_for(host)
     assert off.emit_exposures is False and [e for e in off.export_outbox(0) if e.payload_type == "exposure.v1"] == []
+
+
+def test_local_churn_is_reported_for_accounts_the_federation_sees_as_active(host):
+    a = adapter_for(host)
+    a.apply_membership([MembershipChange("g1", "active", 0, "initial"), MembershipChange("g2", "active", 0, "initial"),
+                        MembershipChange("g3", "dormant", 0, "initial")])
+    assert a.churned_agents(0) == []
+    with Session(host._db.engine) as s:
+        for n in (1, 3):
+            s.get(User_mgmt, U[n]).left_on = host.current_round_id
+        s.commit()
+    assert a.churned_agents(0) == ["g1"] and a.churned_agents(9) == ["g1"] and a.churned_agents(-1) == []

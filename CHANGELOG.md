@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- Federation local churn (F4.5, opt-in): `churned_agents(day)` gives the accounts whose `left_on` round is in the days up to the given one and that the federation still sees as active, so the coordinator records them as left with reason churn.
 - Federation exposures (F4.4b, opt-in `federation.exposures`): with `federation.exposures` the adapter also hands `exposure.v1` to the bus: recommended photos that are materialised cross-posts are views (approximate), reactions and comments are interactions (exact); tie from the follow table; table `federation_exposure_log`, fixed per tick.
 - Federation attention (opt-in): `apply_attention` stores the multiplier of the day per account (table `federation_attention`); `get_federation_attention` serves it and the round planner scales the chance that an agent acts in a round; with the federation off or multiplier 1 nothing changes.
 - Federation affective report (opt-in): `affective_report(day)` of the adapter gives the native stress/reward of the active accounts at the end of the day, read from the runtime's own tables without writing.
