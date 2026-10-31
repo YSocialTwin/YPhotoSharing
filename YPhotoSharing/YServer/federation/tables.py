@@ -7,7 +7,7 @@ federation_export:     photos handed to the bus, with tick and sequence number, 
 federation_state:      small key/value store.
 They live in a metadata of their own: the existing tables and their creation do not change."""
 
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, Float, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -40,6 +40,16 @@ class FederationExport(Base):
     seq = Column(Integer, nullable=True)
 
 
+class FederationAttention(Base):
+    """Attention multiplier of the day for each account (F4.3); an account without a row has multiplier 1."""
+
+    __tablename__ = "federation_attention"
+
+    user_id = Column(String(36), primary_key=True)
+    day = Column(Integer, nullable=False)
+    multiplier = Column(Float, nullable=False)
+
+
 class FederationState(Base):
     __tablename__ = "federation_state"
 
@@ -48,5 +58,5 @@ class FederationState(Base):
 
 
 def ensure_tables(engine):
-    """CREATE TABLE IF NOT EXISTS for the four tables."""
+    """CREATE TABLE IF NOT EXISTS for the five tables."""
     Base.metadata.create_all(engine, checkfirst=True)

@@ -9,7 +9,7 @@ Bus and membership (F3.4d), same design as the other runtimes:
   photo of active authors in the current round with export_policy = "all", into content.v1 (kind "photo").
 - ingest_inbox materialises crosspost.v1 as a photo of the author, once per fed_msg_id (INV-05), with a federation_ref
   row. A photo needs its image: a cross-post without image_ref is skipped (skipped_no_image).
-Affective report (F4.1): native stress/reward of the server. Attention: F4.3.
+Affective report (F4.1): native stress/reward of the server. Attention (F4.3): multipliers stored per account, read by the client.
 
 `host` is the object that owns the database: it needs `_db` (with `engine` and `get_or_create_round`) and
 `current_round_id` (the OrchestratorServer; a small stand-in in tests)."""
@@ -258,4 +258,24 @@ class YPhotoSharingAdapter(PlatformAdapter):
             return out
 
     def apply_attention(self, day, multipliers):
-        return None  # F4
+        """Store the multipliers of the day (F4.3): accounts that are not in the dictionary go back to 1; unknown agents are
+        ignored. The client reads them with server.get_federation_attention and the round planner scales the chance that an
+        agent acts in a round."""
+        from YPhotoSharing.YServer.classes.models import User_mgmt
+        from .tables import FederationAttention
+
+        with self._lock, self._session() as s:
+            known = set(s.scalars(select(User_mgmt.id)).all())
+            s.query(FederationAttention).delete()
+            for gid, value in sorted((multipliers or {}).items()):
+                uid = self.user_of(gid)
+                if uid in known and float(value) != 1.0:
+                    s.add(FederationAttention(user_id=uid, day=int(day), multiplier=float(value)))
+            s.commit()
+
+    def attention_multipliers(self):
+        """{local user id: multiplier} of the current day (accounts not listed: 1)."""
+        from .tables import FederationAttention
+
+        with self._lock, self._session() as s:
+            return {r.user_id: r.multiplier for r in s.scalars(select(FederationAttention)).all()}

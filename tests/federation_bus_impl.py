@@ -286,3 +286,44 @@ def test_affective_report_equals_what_the_runtime_computes(host):
     assert samples["g1"].actions == 2 and samples["g1"].exposures == 3
     assert (samples["g2"].stress, samples["g2"].reward, samples["g2"].actions) == (0.0, 0.0, 1)
     assert a.affective_report(9) == []
+
+
+def test_attention_multipliers_are_stored_per_account_and_served_to_the_client(host):
+    a = adapter_for(host)
+    a.apply_attention(1, {"g1": 1.5, "g2": 1.0, "g3": 0.4, "nobody": 3.0})
+    assert a.attention_multipliers() == {U[1]: 1.5, U[3]: 0.4}  # 1.0 needs no row, unknown agents are ignored
+    server = SimpleNamespace(_federation_adapter=a)
+    assert _unwrap("get_federation_attention")(server) == {U[1]: 1.5, U[3]: 0.4}
+    a.apply_attention(2, {"g2": 2.0})  # a new day replaces the previous multipliers
+    assert adapter_for(host).attention_multipliers() == {U[2]: 2.0}  # and they survive a restart
+    a.apply_attention(3, {})
+    assert a.attention_multipliers() == {} and _unwrap("get_federation_attention")(SimpleNamespace(_federation_adapter=None)) == {}
+
+
+def test_client_attention_changes_who_acts_with_its_own_generator():
+    async def remote():
+        return {"a": 0.0, "b": 0.5, "c": 1.0}
+
+    server = SimpleNamespace(get_federation_attention=SimpleNamespace(remote=remote))
+
+    def agents(profile):
+        return [SimpleNamespace(user_data={"id": i, "daily_activity_level": 5, **({"activity_profile": "p"} if profile else {})})
+                for i in "abc"]
+
+    def acting(planner, profile, rounds=200):
+        counts = {"a": 0, "b": 0, "c": 0}
+        for _ in range(rounds):
+            for x in planner.select_active_agents(agents(profile), 3):
+                counts[x.user_data["id"]] += 1
+        return counts
+
+    client_fed.install({"federation": {"enabled": True, "seed": 3}})
+    asyncio.run(client_fed.refresh_attention(server))
+    for profile in (True, False):
+        random.seed(11)
+        planner = SimulationRoundPlanner({"activity_profiles": {"p": list(range(24))}, "hourly_activity": {"3": 1.0}})
+        c = acting(planner, profile)
+        assert c["a"] == 0 and c["c"] == 200 and 70 < c["b"] < 130, (profile, c)  # 0 never acts, 1 as usual, 0.5 half the rounds
+    client_fed.install({})  # off: identity, nobody is held back and the generator is not used
+    random.seed(11)
+    assert acting(SimulationRoundPlanner({"activity_profiles": {"p": list(range(24))}}), True) == {"a": 200, "b": 200, "c": 200}

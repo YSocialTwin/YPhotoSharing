@@ -12,14 +12,14 @@ from __future__ import annotations
 
 import random
 
-_state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set()}
+_state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set(), "attention": {}}
 
 
 def install(config):
     """Read config["federation"]; call once when the client starts."""
     section = (config or {}).get("federation") or {}
     enabled = bool(section.get("enabled"))
-    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set())
+    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={})
     if enabled:
         _state.update(propensity=float(section.get("crosspost_propensity", 0.0)), rng=random.Random(section.get("seed", 0)))
     return enabled
@@ -38,6 +38,28 @@ async def inactive_ids(server):
     except Exception:  # noqa: BLE001 - keep the last known list
         pass
     return set(_state["inactive"])
+
+
+async def refresh_attention(server):
+    """Read the attention multipliers of the day from the server (the last known ones when it cannot be reached)."""
+    if not _state["enabled"]:
+        return
+    try:
+        _state["attention"] = {str(k): float(v) for k, v in (await server.get_federation_attention.remote()).items()}
+    except Exception:  # noqa: BLE001 - keep the last known multipliers
+        pass
+
+
+def attention_multiplier(user_id):
+    """Attention multiplier of the account (1.0 when the federation is off or it has none)."""
+    return _state["attention"].get(str(user_id), 1.0) if _state["enabled"] else 1.0
+
+
+def skipped_by_attention(user_id):
+    """True when an agent that would act for sure (it is in its activity profile) stays out of the round because its
+    multiplier is below 1 (draw with the generator of this module, only when the multiplier is not 1)."""
+    m = attention_multiplier(user_id)
+    return m < 1.0 and _state["rng"].random() >= m
 
 
 def post_fields():

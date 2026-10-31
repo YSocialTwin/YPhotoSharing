@@ -431,6 +431,12 @@ class OrchestratorServer:
             return self._federation_adapter.filter_users(found)[:limit]  # accounts that are not active are invisible
         return self.follow_recsys.recommend_users_to_follow(user_id, limit)
 
+    def get_federation_attention(self) -> Dict[str, float]:
+        """{local user id: attention multiplier of the day} (federation only; accounts not listed: 1)."""
+        if self._federation_adapter is None:
+            return {}
+        return self._federation_adapter.attention_multipliers()
+
     def get_federation_inactive_agents(self) -> List[str]:
         """Local ids of the accounts that are not active on this platform (federation); [] standalone."""
         if self._federation_adapter is None:

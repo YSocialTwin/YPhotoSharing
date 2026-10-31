@@ -366,6 +366,7 @@ class SimulationClient:
         self._round_count += 1
         if _federation.enabled():  # accounts that are not active on this platform do not act in this round
             self.round_planner.excluded_ids = await _federation.inactive_ids(self.server)
+            await _federation.refresh_attention(self.server)
 
         start_time = time.time()
         all_results = await self._run_agents_async(day, hour, round_id)
