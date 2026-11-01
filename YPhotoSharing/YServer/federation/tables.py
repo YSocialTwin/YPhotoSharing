@@ -40,6 +40,21 @@ class FederationExport(Base):
     seq = Column(Integer, nullable=True)
 
 
+class FederationCrosspost(Base):
+    """The agent chose to cross-post a photo to another platform with this text (F6.2, crosspost.mode = agent_action).
+
+    account_id, tick and seq are fixed at the first export of the photo, so that a retry sends the same message."""
+
+    __tablename__ = "federation_crosspost"
+
+    photo_id = Column(String(36), primary_key=True)
+    member = Column(String(64), primary_key=True)
+    text = Column(Text, nullable=False, default="")
+    account_id = Column(String(64), nullable=True)
+    tick = Column(Integer, nullable=True)
+    seq = Column(Integer, nullable=True)
+
+
 class FederationAttention(Base):
     """Attention multiplier of the day for each account (F4.3); an account without a row has multiplier 1."""
 

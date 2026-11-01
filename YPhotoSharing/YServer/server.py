@@ -353,13 +353,17 @@ class OrchestratorServer:
         return self._db.get_following(user_id)
 
     def post_photo(self, photo_data: dict) -> str:
-        crosspost = False
-        if "crosspost" in photo_data:  # the agent's choice to cross-post (federation, D-07); not a column
+        crosspost, targets = False, None
+        if "crosspost" in photo_data or "crosspost_to" in photo_data:  # the agent's choice to cross-post (federation, D-07); not columns
             photo_data = dict(photo_data)
-            crosspost = bool(photo_data.pop("crosspost"))
+            crosspost = bool(photo_data.pop("crosspost", False))
+            targets = photo_data.pop("crosspost_to", None)
         photo_id = self.social_action_service.post_photo(photo_data)
         if crosspost and self._federation_adapter is not None:
-            self._federation_adapter.mark_for_export(photo_id)
+            if isinstance(targets, list):
+                self._federation_adapter.mark_for_export(photo_id, targets)
+            else:
+                self._federation_adapter.mark_for_export(photo_id)
         return photo_id
 
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
@@ -436,6 +440,13 @@ class OrchestratorServer:
         if self._federation_adapter is None:
             return {}
         return self._federation_adapter.attention_multipliers()
+
+    def get_federation_destinations(self, user_id: str) -> List[str]:
+        """Members where this account's agent can cross-post now (federation, crosspost.mode = agent_action); [] otherwise."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_members"):
+            return []
+        return adapter.destination_members(user_id)
 
     def get_federation_inactive_agents(self) -> List[str]:
         """Local ids of the accounts that are not active on this platform (federation); [] standalone."""

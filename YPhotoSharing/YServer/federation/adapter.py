@@ -32,7 +32,8 @@ log = logging.getLogger("yphotosharing.federation")
 class YPhotoSharingAdapter(PlatformAdapter):
     platform = "photo_sharing"
 
-    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False):
+    def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False,
+                 crosspost_mode="coordinator_rule"):
         """accounts: {global_agent_id: local user id}; without an entry the global id is the local user id."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
@@ -41,6 +42,10 @@ class YPhotoSharingAdapter(PlatformAdapter):
         self.host = host
         self.export_policy = export_policy
         self.emit_exposures = bool(emit_exposures)
+        if crosspost_mode not in ("coordinator_rule", "agent_action"):
+            raise ValueError("crosspost_mode must be 'coordinator_rule' or 'agent_action'")
+        self.crosspost_mode = crosspost_mode
+        self._destinations = {}  # {global_agent_id: [{"member", "local_account_id"}]}, set by the gate before each export
         self._accounts = {str(k): str(v) for k, v in (accounts or {}).items()}
         self._by_user = {v: k for k, v in self._accounts.items()}
         self._lock = threading.RLock()
@@ -164,16 +169,28 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 for seq, photo in enumerate(pending):
                     s.merge(FederationExport(photo_id=photo.id, tick=tick, seq=seq))
                 s.commit()
+                if self.crosspost_mode == "agent_action":
+                    self._fix_crossposts(s, tick, pending, len(pending))
                 already = s.scalars(select(FederationExport).where(FederationExport.tick == tick)
                                     .order_by(FederationExport.seq)).all()
             out = []
+            asked = self._crossposts_of(s, tick) if self.crosspost_mode == "agent_action" else []
+            by_photo = {r.photo_id for r in asked}
             for row in already:
+                if row.photo_id in by_photo:  # the agent chose where to post it: the cross-posts are the message
+                    continue
                 photo = s.get(Photo, row.photo_id)
                 out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, row.seq, "content.v1",
                                            self._content(s, photo)))
+            for req in asked:
+                content = self._content(s, s.get(Photo, req.photo_id))
+                if req.text:
+                    content["text_excerpt"] = req.text[:TEXT_EXCERPT_MAX]
+                out.append(Envelope.create(self.federation_id, self.member, req.member, tick, req.seq, "crosspost.v1",
+                                           dict(content, target_account_id=req.account_id)))
             if self.emit_exposures:
                 for row in self._exposure_rows(s, tick):
-                    out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, len(out), "exposure.v1", {
+                    out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out), default=-1) + 1, "exposure.v1", {
                         "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
                         "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
             return out
@@ -236,14 +253,57 @@ class YPhotoSharingAdapter(PlatformAdapter):
         s.commit()
         return stored()
 
-    def mark_for_export(self, photo_id):
-        """The agent chose to cross-post this photo (D-07): it will be exported at the next barrier."""
-        from .tables import FederationExport
+    def mark_for_export(self, photo_id, targets=None):
+        """The agent chose to cross-post this photo (D-07): it will be exported at the next barrier.
+
+        targets (crosspost.mode = agent_action): [{"member", "text"}], where the agent wants it and with which text."""
+        from .tables import FederationCrosspost, FederationExport
 
         with self._lock, self._session() as s:
             if s.get(FederationExport, str(photo_id)) is None:
                 s.add(FederationExport(photo_id=str(photo_id), tick=None, seq=None))
-                s.commit()
+            if self.crosspost_mode == "agent_action":
+                for target in targets or []:
+                    member = str(target.get("member") or "")
+                    if member and member != self.member and s.get(FederationCrosspost, (str(photo_id), member)) is None:
+                        s.add(FederationCrosspost(photo_id=str(photo_id), member=member, text=str(target.get("text") or "")))
+            s.commit()
+
+    # -- agent-action cross-posts (F6.2) -------------------------------------------------
+    def set_destinations(self, destinations):
+        self._destinations = {str(k): list(v) for k, v in (destinations or {}).items()}
+
+    def destination_members(self, user_id):
+        """Members where this account's agent could cross-post now (as of the last barrier)."""
+        return sorted(d["member"] for d in self._destinations.get(self.agent_of(user_id), []))
+
+    def _fix_crossposts(self, s, tick, photos, first_seq):
+        """First export of the tick: give each requested cross-post its account, tick and sequence number (a request
+        for a platform where the author has no active account is dropped)."""
+        from sqlalchemy import select as _select
+
+        from .tables import FederationCrosspost
+
+        seq = first_seq
+        for photo in photos:
+            wanted = self._destinations.get(self.agent_of(photo.user_id), [])
+            rows = s.scalars(_select(FederationCrosspost).where(FederationCrosspost.photo_id == photo.id, FederationCrosspost.tick.is_(None))
+                             .order_by(FederationCrosspost.member)).all()
+            for row in rows:
+                account = next((d["local_account_id"] for d in wanted if d["member"] == row.member), None)
+                row.tick = tick
+                if account is None:
+                    log.info("federation: cross-post of photo %s to %s dropped: no active account", photo.id, row.member)
+                    continue
+                row.account_id, row.seq = str(account), seq
+                seq += 1
+        s.commit()
+
+    def _crossposts_of(self, s, tick):
+        from .tables import FederationCrosspost
+
+        return list(s.scalars(select(FederationCrosspost).where(FederationCrosspost.tick == tick, FederationCrosspost.seq.is_not(None))
+                              .order_by(FederationCrosspost.seq)).all())
 
     # -- bus: ingest -------------------------------------------------------------------
     def ingest_inbox(self, tick, envelopes):

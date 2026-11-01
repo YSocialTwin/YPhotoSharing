@@ -143,7 +143,7 @@ async def post_photo(
         "location_name": location_name,
         "topic": topic,
         "topics": [topic],
-        **_federation.post_fields(),  # {} unless the federation is on and the agent chose to cross-post
+        **(await _federation.post_fields_async(server, user_id, caption, llm_service if is_llm_agent else None)),  # {} unless the federation is on and the agent chose to cross-post
     }
     try:
         # The photo is published first: the annotations (an LLM call for the emotions) can be slow and

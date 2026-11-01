@@ -352,6 +352,16 @@ class LLMService:
         return self._render("generate_caption", persona=persona, topic=topic,
                             day=day, slot=slot, mention_instruction=mention_instruction)
 
+    def adapt_crosspost(self, dest: str, text: str, source_platform: str = "") -> str:
+        """The agent's caption rewritten for another platform (cross-post as an agent action); "" when it fails."""
+        try:
+            message = prompt_store.prompt(f"crosspost_adapt_{dest}", source_platform=source_platform, text=text)
+            chain = ChatPromptTemplate.from_messages([("human", "{message}")]) | self.llm | self._parser
+            return chain.invoke({"message": message}).strip()
+        except Exception as exc:
+            logger.warning(f"cross-post adaptation failed: {exc}")
+            return ""
+
     def decide_reaction(self, caption: str, cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Decide how to react to a photo (LIKE / LOVE / LAUGH / WOW / SAD / ANGRY / IGNORE)."""
         result = self._render(
