@@ -159,3 +159,24 @@ async def post_fields_async(server, user_id, text, llm_service=None):
                 version = None
         targets.append({"member": dest, "text": version or rule_text(dest, text)})
     return {"crosspost": True, "crosspost_to": targets} if targets else {}
+
+
+async def share_fields_async(server, user_id, text, llm_service=None):
+    """Extra fields of the photo data of a share (F8): the agent shares the photo of another agent and may choose to
+    share it, with its own words, on other platforms. Only with crosspost.mode = agent_action; otherwise nothing is
+    drawn and the share stays on this platform. A share without words (no model) still goes: the quotation carries it."""
+    if not _state["enabled"] or _state["mode"] != "agent_action" or _state["propensity"] <= 0.0:
+        return {}
+    text = str(text or "").strip()
+    targets = []
+    for dest in await destinations(server, user_id):
+        if _state["rng"].random() >= _state["propensity"]:
+            continue
+        version = None
+        if text and llm_service is not None and adapt_prompt_key(dest) is not None:
+            try:
+                version = parse_reply(dest, await llm_service.adapt_crosspost.remote(dest, text, source_platform()))
+            except Exception:  # noqa: BLE001 - a failing model must not stop the share
+                version = None
+        targets.append({"member": dest, "text": (version or rule_text(dest, text)) if text else ""})
+    return {"crosspost": True, "crosspost_to": targets} if targets else {}

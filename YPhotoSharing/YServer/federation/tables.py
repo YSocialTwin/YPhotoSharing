@@ -40,6 +40,19 @@ class FederationExport(Base):
     seq = Column(Integer, nullable=True)
 
 
+class FederationQuoted(Base):
+    """F8: structured reference of the photo another agent posted, shared by the photo `photo_id`."""
+
+    __tablename__ = "federation_quoted"
+
+    photo_id = Column(String(36), primary_key=True)
+    author_name = Column(String(200), nullable=False)
+    global_agent_id = Column(String(64), nullable=True)
+    member = Column(String(64), nullable=False)
+    source_ref = Column(Text, nullable=True)
+    text_excerpt = Column(Text, nullable=False, default="")
+
+
 class FederationCrosspost(Base):
     """The agent chose to cross-post a photo to another platform with this text (F6.2, crosspost.mode = agent_action).
 

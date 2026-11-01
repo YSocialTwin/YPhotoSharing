@@ -164,3 +164,77 @@ def test_the_five_prompts_exist_in_both_languages_and_render():
         for lang in ("en", "it"):
             text = prompt_store.prompt(federation.adapt_prompt_key(dest), language=lang, source_platform="forum", text="SAMPLE")
             assert "SAMPLE" in text and "{" not in text
+
+
+# -- F8: sharing the photo of another agent ---------------------------------------------------------------
+def new_share(host, n, parent, caption=""):  # noqa: F811
+    import uuid
+
+    pid = str(uuid.uuid4())
+    host._db.create_photo({"id": pid, "user_id": U[n], "round": host.current_round_id, "image_url": "https://img/x.jpg",
+                           "caption": caption, "parent_photo_id": parent, "topics": []})
+    return pid
+
+
+def test_a_marked_share_leaves_as_a_crosspost_quoting_the_original_author(host):  # noqa: F811
+    a = agent_adapter(host)
+    original = new_photo(host, 2, "words of the second agent")
+    share = new_share(host, 1, original, "so true")
+    a.mark_for_export(share, [{"member": "forum", "text": "so true"}])
+    out = a.export_outbox(3)
+    assert [(e.payload_type, e.target_member, e.payload["global_agent_id"], e.payload["text_excerpt"]) for e in out] == [
+        ("crosspost.v1", "forum", "g1", "so true")]
+    q = out[0].payload["quoted"]
+    assert q["global_agent_id"] == "g2" and q["member"] == "photos" and q["text_excerpt"] == "words of the second agent"
+    assert q["source_ref"] == f"ysocial://1/photos/photo/{original}"
+
+
+def test_an_unmarked_share_and_a_share_in_coordinator_rule_mode_never_leave(host):  # noqa: F811
+    a = agent_adapter(host)
+    original = new_photo(host, 2, "words")
+    new_share(host, 1, original, "plain")
+    assert a.export_outbox(3) == []
+    b = adapter_for(host)
+    b.mark_for_export(new_share(host, 1, original, "marked"), [{"member": "forum", "text": "t"}])
+    assert b.export_outbox(4) == []
+
+
+def test_an_author_outside_the_identity_map_is_quoted_as_anonymous(host):  # noqa: F811
+    a = agent_adapter(host)
+    original = new_photo(host, 3, "from a non member")
+    a._by_user.pop(U[3], None)
+    a.mark_for_export(new_share(host, 1, original, "look"), [{"member": "forum", "text": "look"}])
+    q = a.export_outbox(3)[0].payload["quoted"]
+    assert q["global_agent_id"] is None and q["source_ref"] is None
+
+
+def test_the_destination_writes_the_caption_with_the_attribution_and_keeps_the_reference(host):  # noqa: F811
+    from ysocial_federation.envelope import Envelope
+    from YPhotoSharing.YServer.classes.models import Photo
+    from YPhotoSharing.YServer.federation.tables import FederationQuoted
+
+    a = agent_adapter(host)
+    q = {"author_name": "ann", "global_agent_id": "gx", "member": "forum", "source_ref": "ysocial://1/forum/post/4",
+         "text_excerpt": "original words"}
+    env = Envelope.create(1, "forum", "photos", 2, 0, "crosspost.v1",
+                          {"global_agent_id": "g1", "source_ref": "ysocial://1/forum/post/7", "kind": "post", "text_excerpt": "agreed",
+                           "image_ref": "https://img/z.jpg", "topics": [], "lang": "en", "target_account_id": U[1], "quoted": q})
+    assert a.ingest_inbox(3, [env]).materialized == 1
+    with a._session() as s:
+        photo = s.query(Photo).filter(Photo.image_url == "https://img/z.jpg").one()
+        assert photo.caption == "agreed\n↪ ann @ forum: «original words»"
+        row = s.get(FederationQuoted, photo.id)
+        assert (row.author_name, row.global_agent_id, row.member, row.source_ref) == ("ann", "gx", "forum", "ysocial://1/forum/post/4")
+
+
+def test_client_share_fields_only_in_agent_action_and_a_wordless_share_still_goes():
+    federation.install({})
+    state = random.getstate()
+    assert run(federation.share_fields_async(_server(["forum"]), "u", "text")) == {} and random.getstate() == state
+    _on(mode="coordinator_rule")
+    assert run(federation.share_fields_async(_server(["forum"]), "u", "text")) == {}  # no draw, shares stay local
+    _on()
+    fields = run(federation.share_fields_async(_server(["forum", "dating"]), "u", "nice one", _llm(lambda d: "from the model" if d == "dating" else "")))
+    assert fields["crosspost_to"] == [{"member": "dating", "text": "from the model"}, {"member": "forum", "text": "nice one\nnice one"}]
+    assert run(federation.share_fields_async(_server(["forum"]), "u", "")) == {"crosspost": True, "crosspost_to": [{"member": "forum", "text": ""}]}
+    federation.install({})

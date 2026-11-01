@@ -21,6 +21,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ysocial_federation import quoted as fed_quoted
 from ysocial_federation.adapter import IngestReport, PlatformAdapter
 from ysocial_federation.envelope import COORDINATOR, Envelope
 from ysocial_federation.schemas import TEXT_EXCERPT_MAX
@@ -160,11 +161,15 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 done = set(s.scalars(select(FederationExport.photo_id).where(FederationExport.tick.is_not(None))).all())
                 made = set(s.scalars(select(FederationRef.local_id).where(FederationRef.local_kind == "photo")).all())
                 candidates = set(s.scalars(select(FederationExport.photo_id).where(FederationExport.tick.is_(None))).all())
+                marked = set(candidates)
                 if self.export_policy == "all":
                     candidates |= set(s.scalars(select(Photo.id).where(Photo.round == self._round_id())).all())
                 photos = [s.get(Photo, pid) for pid in candidates - done - made]
+                # F8: a share (parent_photo_id set) leaves only when the agent marked it, and only in agent_action
+                shares_ok = self.crosspost_mode == "agent_action"
                 pending = sorted((p for p in photos if p is not None and not p.is_removed and p.image_url
-                                  and p.parent_photo_id is None and self._active(s, p.user_id)),
+                                  and (p.parent_photo_id is None or (shares_ok and p.id in marked))
+                                  and self._active(s, p.user_id)),
                                  key=lambda p: (p.caption or "", p.id))  # UUIDs carry no order: the text keeps it stable
                 for seq, photo in enumerate(pending):
                     s.merge(FederationExport(photo_id=photo.id, tick=tick, seq=seq))
@@ -186,14 +191,34 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 content = self._content(s, s.get(Photo, req.photo_id))
                 if req.text:
                     content["text_excerpt"] = req.text[:TEXT_EXCERPT_MAX]
-                out.append(Envelope.create(self.federation_id, self.member, req.member, tick, req.seq, "crosspost.v1",
-                                           dict(content, target_account_id=req.account_id)))
+                body = dict(content, target_account_id=req.account_id)
+                quoted = self._quoted(s, s.get(Photo, req.photo_id))
+                if quoted is not None:
+                    body["quoted"] = quoted
+                out.append(Envelope.create(self.federation_id, self.member, req.member, tick, req.seq, "crosspost.v1", body))
             if self.emit_exposures:
                 for row in self._exposure_rows(s, tick):
                     out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out), default=-1) + 1, "exposure.v1", {
                         "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
                         "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
             return out
+
+    def _quoted(self, s, photo):
+        """F8: `quoted` of a photo that shares another one (None for any other photo): the original author, this platform
+        and the original caption; the author is a federation identity only when the account is in the identity map."""
+        if photo is None or not photo.parent_photo_id:
+            return None
+        from YPhotoSharing.YServer.classes.models import Photo, User_mgmt
+        from .tables import FederationRef
+
+        original = s.get(Photo, photo.parent_photo_id)
+        if original is None:
+            return None
+        author = s.get(User_mgmt, original.user_id)
+        gid = self._by_user.get(str(original.user_id))
+        ref = s.scalar(select(FederationRef.source_ref).where(FederationRef.local_kind == "photo", FederationRef.local_id == original.id))
+        ref = ref or f"ysocial://{self.federation_id}/{self.member}/photo/{original.id}"
+        return fed_quoted.build(author.username if author is not None else "unknown", gid, self.member, ref, original.caption)
 
     def _tie(self, s, viewer, author):
         """none / follow / mutual between a viewer and the author of a photo, from the latest follow rows."""
@@ -308,7 +333,7 @@ class YPhotoSharingAdapter(PlatformAdapter):
     # -- bus: ingest -------------------------------------------------------------------
     def ingest_inbox(self, tick, envelopes):
         from YPhotoSharing.YServer.classes.models import Photo, PhotoTopic, User_mgmt
-        from .tables import FederationRef
+        from .tables import FederationQuoted, FederationRef
 
         report = IngestReport()
 
@@ -331,11 +356,16 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 if not payload.get("image_ref"):
                     skip("skipped_no_image")  # a photo needs its image
                     continue
+                quoted = payload.get("quoted")
                 photo_id = str(uuid.uuid4())
                 # photo, topics and reference in one transaction: a crash leaves nothing, the message comes again
                 s.add(Photo(id=photo_id, user_id=uid, round=self._round_id(), image_url=payload["image_ref"],
-                            thumbnail_url=payload["image_ref"], caption=payload["text_excerpt"]))
+                            thumbnail_url=payload["image_ref"],
+                            caption=fed_quoted.render(payload["text_excerpt"], quoted, 300) if quoted else payload["text_excerpt"]))
                 s.flush()
+                if quoted:
+                    s.add(FederationQuoted(photo_id=photo_id, author_name=quoted["author_name"], global_agent_id=quoted["global_agent_id"],
+                                           member=quoted["member"], source_ref=quoted["source_ref"], text_excerpt=quoted["text_excerpt"]))
                 for name in dict.fromkeys(payload.get("topics") or []):
                     s.add(PhotoTopic(id=str(uuid.uuid4()), photo_id=photo_id, confidence=1.0,
                                      topic_id=self.host._db._add_or_get_interest_in_session(s, str(name))))
