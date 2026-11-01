@@ -238,3 +238,38 @@ def test_client_share_fields_only_in_agent_action_and_a_wordless_share_still_goe
     assert fields["crosspost_to"] == [{"member": "dating", "text": "from the model"}, {"member": "forum", "text": "nice one\nnice one"}]
     assert run(federation.share_fields_async(_server(["forum"]), "u", "")) == {"crosspost": True, "crosspost_to": [{"member": "forum", "text": ""}]}
     federation.install({})
+
+
+# -- topic migration -------------------------------------------------------------------------------------
+def _topic_env(topics, seq=0, source="forum"):
+    from ysocial_federation.envelope import Envelope
+
+    return Envelope.create(1, source, "photos", 2, seq, "crosspost.v1",
+                           {"global_agent_id": "g1", "source_ref": f"ysocial://1/{source}/post/{seq + 50}", "kind": "post",
+                            "text_excerpt": "hi", "image_ref": f"https://img/t{seq}.jpg", "topics": topics, "lang": "en",
+                            "target_account_id": U[1]})
+
+
+def test_a_share_exports_the_topics_of_the_original(host):  # noqa: F811
+    a = agent_adapter(host)
+    original = new_photo(host, 2, "about cats", topics=["Cats", "pets"])
+    share = new_share(host, 1, original, "so true")
+    a.mark_for_export(share, [{"member": "forum", "text": "so true"}])
+    assert a.export_outbox(3)[0].payload["topics"] == ["Cats", "pets"]
+
+
+def test_ingest_attaches_existing_topics_case_insensitively_and_creates_missing_ones_once(host):  # noqa: F811
+    from sqlalchemy import func, select
+    from YPhotoSharing.YServer.classes.models import Interest, PhotoTopic
+    from YPhotoSharing.YServer.federation.tables import FederationTopic
+
+    a = agent_adapter(host)
+    new_photo(host, 2, "seed", topics=["Cats"])
+    assert a.ingest_inbox(3, [_topic_env(["cats", "Dogs", "DOGS", "  "], 0), _topic_env(["dogs", "Birds"], 1, source="micro")]).materialized == 2
+    with a._session() as s:
+        names = sorted(i.interest for i in s.scalars(select(Interest)).all())
+        assert names == ["Birds", "Cats", "Dogs"]  # "cats" reused "Cats"; "DOGS" and "dogs" reused "Dogs"
+        assert s.scalar(select(func.count()).select_from(PhotoTopic)) == 1 + 2 + 2
+        made = {t.name: (t.created_tick, t.source_member) for t in s.scalars(select(FederationTopic)).all()}
+        assert made == {"Dogs": (3, "forum"), "Birds": (3, "micro")}
+    assert a.ingest_inbox(3, [_topic_env(["cats", "Dogs", "DOGS", "  "], 0)]).duplicates == 1  # INV-05: nothing more is created

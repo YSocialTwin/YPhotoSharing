@@ -92,6 +92,16 @@ class FederationExposure(Base):
     exact = Column(Integer, nullable=False)
 
 
+class FederationTopic(Base):
+    """Topics created here because cross-posted content carried them (topic migration): name as first seen, tick, origin."""
+
+    __tablename__ = "federation_topic"
+
+    name = Column(String(200), primary_key=True)
+    created_tick = Column(Integer, nullable=False)
+    source_member = Column(String(64), nullable=False)
+
+
 class FederationState(Base):
     __tablename__ = "federation_state"
 

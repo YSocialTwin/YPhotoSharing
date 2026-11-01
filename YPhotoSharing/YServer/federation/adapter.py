@@ -140,8 +140,13 @@ class YPhotoSharingAdapter(PlatformAdapter):
         from YPhotoSharing.YServer.classes.models import Interest, PhotoTopic, User_mgmt
 
         user = s.get(User_mgmt, photo.user_id)
-        topics = [i.interest for i in s.scalars(select(Interest).join(PhotoTopic, PhotoTopic.topic_id == Interest.iid)
-                                                .where(PhotoTopic.photo_id == photo.id).order_by(Interest.interest)).all()]
+        def names(photo_id):
+            return [i.interest for i in s.scalars(select(Interest).join(PhotoTopic, PhotoTopic.topic_id == Interest.iid)
+                                                  .where(PhotoTopic.photo_id == photo_id).order_by(Interest.interest)).all()]
+
+        topics = names(photo.id)
+        if not topics and photo.parent_photo_id:  # a share has no topics of its own: those of the original travel with it
+            topics = names(photo.parent_photo_id)
         return {"global_agent_id": self.agent_of(photo.user_id),
                 "source_ref": f"ysocial://{self.federation_id}/{self.member}/photo/{photo.id}",
                 "kind": "photo", "text_excerpt": (photo.caption or "")[:TEXT_EXCERPT_MAX],
@@ -331,6 +336,20 @@ class YPhotoSharingAdapter(PlatformAdapter):
                               .order_by(FederationCrosspost.seq)).all())
 
     # -- bus: ingest -------------------------------------------------------------------
+    def _topic_id(self, s, name, tick, source_member):
+        """Topic migration: the topic of that name here (case-insensitive), created and recorded when it does not exist."""
+        from sqlalchemy import func
+        from YPhotoSharing.YServer.classes.models import Interest
+        from .tables import FederationTopic
+
+        found = s.scalars(select(Interest).where(func.lower(Interest.interest) == name.lower()).order_by(Interest.iid)).first()
+        if found is not None:
+            return found.iid
+        iid = self.host._db._add_or_get_interest_in_session(s, name)
+        if s.get(FederationTopic, name) is None:
+            s.add(FederationTopic(name=name, created_tick=int(tick), source_member=str(source_member)))
+        return iid
+
     def ingest_inbox(self, tick, envelopes):
         from YPhotoSharing.YServer.classes.models import Photo, PhotoTopic, User_mgmt
         from .tables import FederationQuoted, FederationRef
@@ -366,9 +385,14 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 if quoted:
                     s.add(FederationQuoted(photo_id=photo_id, author_name=quoted["author_name"], global_agent_id=quoted["global_agent_id"],
                                            member=quoted["member"], source_ref=quoted["source_ref"], text_excerpt=quoted["text_excerpt"]))
-                for name in dict.fromkeys(payload.get("topics") or []):
+                seen = set()
+                for name in payload.get("topics") or []:
+                    name = str(name).strip()
+                    if not name or name.lower() in seen:
+                        continue
+                    seen.add(name.lower())
                     s.add(PhotoTopic(id=str(uuid.uuid4()), photo_id=photo_id, confidence=1.0,
-                                     topic_id=self.host._db._add_or_get_interest_in_session(s, str(name))))
+                                     topic_id=self._topic_id(s, name, tick, env.source_member)))
                 s.add(FederationRef(local_kind="photo", local_id=photo_id, source_ref=payload["source_ref"],
                                     fed_msg_id=env.fed_msg_id))
                 s.commit()

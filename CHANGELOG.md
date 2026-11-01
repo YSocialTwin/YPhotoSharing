@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- Federation topic migration: cross-posted photos attach the topics they carry, matching existing topics case-insensitively and creating the missing ones (recorded in `federation_topic`); a share exports the topics of the original photo.
 - Federation: sharing another agent's photo on other platforms (F8, opt-in, `agent_action`): a marked share leaves as `crosspost.v1` with `quoted` (original author, caption, reference; null identity outside the identity map) and the destination writes the caption with an attribution line and keeps the structured reference in `federation_quoted`. The client draws once per platform when it shares (nothing is drawn otherwise).
 - Cross-post as an agent action (opt-in, `federation.crosspost_mode: agent_action`): after choosing the caption the agent draws once per platform where it is also active (`get_federation_destinations`) with `crosspost_propensity` and sends `crosspost_to` ([{member, text}]) with the photo, with the model's version of the caption (prompts `crosspost_adapt_<platform>`, EN and IT; `LLMService.adapt_crosspost`) or the rule text; the server adapter sends one `crosspost.v1` per chosen destination instead of `content.v1`. Default mode unchanged.
 - Federation local churn (F4.5, opt-in): `churned_agents(day)` gives the accounts whose `left_on` round is in the days up to the given one and that the federation still sees as active, so the coordinator records them as left with reason churn.
