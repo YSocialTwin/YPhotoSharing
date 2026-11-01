@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ysocial_federation import quoted as fed_quoted
+from ysocial_federation.bindings import BoundAccountsMixin
 from ysocial_federation.adapter import IngestReport, PlatformAdapter
 from ysocial_federation.envelope import COORDINATOR, Envelope
 from ysocial_federation.schemas import TEXT_EXCERPT_MAX
@@ -31,12 +32,15 @@ log = logging.getLogger("yphotosharing.federation")
 HUMAN_PREFIX = "human:"  # identities of people; never take part in attention, churn, leave or discovery (INV-15)
 
 
-class YPhotoSharingAdapter(PlatformAdapter):
+class YPhotoSharingAdapter(BoundAccountsMixin, PlatformAdapter):
     platform = "photo_sharing"
 
     def __init__(self, member, federation_id=1, host=None, accounts=None, export_policy="marked", emit_exposures=False,
-                 crosspost_mode="coordinator_rule"):
-        """accounts: {global_agent_id: local user id}; without an entry the global id is the local user id."""
+                 crosspost_mode="coordinator_rule", bindings_file=None):
+        """accounts: {global_agent_id: local user id}; without an entry the global id is the local user id.
+
+        bindings_file (INV-17): agents are bound by username; the accounts are reported to the coordinator, whose answer is kept in
+        this file. Then the local id is never the global id: an account that is not bound acts as usual and is not exported."""
         if export_policy not in ("marked", "all"):
             raise ValueError("export_policy must be 'marked' or 'all'")
         self.member = member
@@ -53,6 +57,21 @@ class YPhotoSharingAdapter(PlatformAdapter):
         self._lock = threading.RLock()
         self._inactive = None  # cache of the ids that are not active; loaded from the table on first use
         self._humans = None  # {local user id: "human:..."}; loaded from federation_human on first use (H5c)
+        self._init_bindings(bindings_file, self._enumerate_accounts, cast=str)
+
+    def _enumerate_accounts(self, after):
+        """Ids are UUIDs (no order): the marker is the number of accounts, so a round without new accounts costs one COUNT."""
+        from sqlalchemy import func
+
+        from YPhotoSharing.YServer.classes.models import User_mgmt
+
+        with self._session() as s:
+            count = s.scalar(select(func.count()).select_from(User_mgmt))
+            if after is not None and int(after) == int(count):
+                return [], after
+            rows = s.execute(select(User_mgmt.username, User_mgmt.id).order_by(User_mgmt.id)).all()
+        humans = self._human_map()
+        return [(u, i) for u, i in rows if i not in humans and i not in self._by_user], count
 
     # -- clock -------------------------------------------------------------------------
     def to_tick(self, local_round):
@@ -71,6 +90,8 @@ class YPhotoSharingAdapter(PlatformAdapter):
             for uid, hid in self._human_map().items():
                 if hid == gid:
                     return uid
+        if self._is_bound_mode:  # INV-17: the global id comes from the coordinator, never from the local id
+            return None
         return gid
 
     def agent_of(self, user_id):
@@ -78,7 +99,9 @@ class YPhotoSharingAdapter(PlatformAdapter):
         if uid in self._by_user:
             return self._by_user[uid]
         human = self._human_map().get(uid)  # a person never takes the local id as global identity (could clash with an agent)
-        return human if human is not None else uid
+        if human is not None:
+            return human
+        return self._unbound_id(uid) if self._is_bound_mode else uid
 
     # -- human participants (H5c) --------------------------------------------------------
     def _human_map(self):
@@ -135,6 +158,9 @@ class YPhotoSharingAdapter(PlatformAdapter):
         with self._lock, self._session() as s:
             for ch in changes:
                 uid = self.user_of(ch.global_agent_id)
+                if uid is None:
+                    log.warning("federation: membership change for unknown agent %s ignored", ch.global_agent_id)
+                    continue
                 row = s.get(FederationMembership, uid)
                 if row is None:
                     s.add(FederationMembership(user_id=uid, global_agent_id=str(ch.global_agent_id), state=ch.state,
@@ -222,7 +248,7 @@ class YPhotoSharingAdapter(PlatformAdapter):
                 shares_ok = self.crosspost_mode == "agent_action"
                 pending = sorted((p for p in photos if p is not None and not p.is_removed and p.image_url
                                   and (p.parent_photo_id is None or (shares_ok and p.id in marked))
-                                  and self._active(s, p.user_id)),
+                                  and self._active(s, p.user_id) and self._federated(p.user_id)),
                                  key=lambda p: (p.caption or "", p.id))  # UUIDs carry no order: the text keeps it stable
                 for seq, photo in enumerate(pending):
                     s.merge(FederationExport(photo_id=photo.id, tick=tick, seq=seq))
@@ -256,6 +282,8 @@ class YPhotoSharingAdapter(PlatformAdapter):
                     rows = rows + self._ensure_quote_exposures(s, tick, rows, quoting)
                 front = []
                 for row in rows:
+                    if not self._federated(row.viewer_uid):
+                        continue
                     env = Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out + front), default=-1) + 1, "exposure.v1", {
                         "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
                         "exact": bool(row.exact), "kind": row.kind, "tie": row.tie})

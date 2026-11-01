@@ -26,7 +26,8 @@ def build_gate(server, config):
                                    accounts=section.get("accounts"),
                                    export_policy=section.get("export_policy", "marked"),
                                    emit_exposures=bool(section.get("exposures", False)),
-                                   crosspost_mode=section.get("crosspost_mode", "coordinator_rule"))
+                                   crosspost_mode=section.get("crosspost_mode", "coordinator_rule"),
+                                   bindings_file=section.get("bindings_file"))
     server._federation_adapter = adapter
     gate = SafeGate(FederationGate(adapter, section))
     gate.start((server._current_day, server._current_hour))
