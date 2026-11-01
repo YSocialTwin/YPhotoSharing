@@ -14,7 +14,7 @@ import random
 import re
 
 _state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set(), "attention": {},
-          "mode": "coordinator_rule", "member": None}
+          "mode": "coordinator_rule", "member": None, "adopt": False}
 
 # Longest text each destination accepts (characters); the rules and the parser of an LLM reply both apply them.
 LIMITS = {"microblogging": 280, "forum": 2000, "photo_sharing": 300, "instant_messaging": 400, "dating": 200}
@@ -24,10 +24,12 @@ def install(config):
     """Read config["federation"]; call once when the client starts."""
     section = (config or {}).get("federation") or {}
     enabled = bool(section.get("enabled"))
-    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={}, mode="coordinator_rule", member=None)
+    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={}, mode="coordinator_rule", member=None,
+                  adopt=False)
     if enabled:
         _state.update(propensity=float(section.get("crosspost_propensity", 0.0)), rng=random.Random(section.get("seed", 0)),
-                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"))
+                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"),
+                      adopt=bool(section.get("adopt")))
     return enabled
 
 
@@ -44,6 +46,31 @@ async def inactive_ids(server):
     except Exception:  # noqa: BLE001 - keep the last known list
         pass
     return set(_state["inactive"])
+
+
+async def adopt_provisioned(server, client):
+    """INV-19: accounts the server created because an agent of another platform decided to join this one get an agent here.
+
+    Only with `federation.adopt` in the client configuration. Each account the server lists (get_federation_provisioned)
+    becomes an agent of `client` (`await client.adopt_federated_account(account)` returns it, or None) and is reported as
+    adopted; the new agent acts like any other from the next round. Returns the number adopted; never raises for a
+    server that cannot be reached."""
+    if not (_state["enabled"] and _state["adopt"]):
+        return 0
+    try:
+        accounts = await server.get_federation_provisioned.remote()
+    except Exception:  # noqa: BLE001 - try again at the next round
+        return 0
+    done = []
+    for account in accounts:
+        if await client.adopt_federated_account(account) is not None:
+            done.append(account["user_id"])
+    if done:
+        try:
+            await server.mark_federation_adopted.remote(done)
+        except Exception:  # noqa: BLE001 - they are offered again and skipped as already known
+            pass
+    return len(done)
 
 
 async def refresh_attention(server):

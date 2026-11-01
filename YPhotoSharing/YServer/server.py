@@ -441,6 +441,19 @@ class OrchestratorServer:
             return {}
         return self._federation_adapter.attention_multipliers()
 
+    def get_federation_provisioned(self) -> List[dict]:
+        """Accounts the federation created here for agents of other platforms and no client adopted yet (INV-19); each is
+        {user_id, username, interests, global_agent_id, user: the stored account}. [] standalone."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "provisioned_accounts"):
+            return []
+        return [{**a, "user": self._db.get_user(a["user_id"])} for a in adapter.provisioned_accounts()]
+
+    def mark_federation_adopted(self, user_ids: List[str]) -> None:
+        """A client gave an agent to each of these provisioned accounts."""
+        if self._federation_adapter is not None and hasattr(self._federation_adapter, "mark_adopted"):
+            self._federation_adapter.mark_adopted(user_ids)
+
     def get_federation_destinations(self, user_id: str) -> List[str]:
         """Members where this account's agent can cross-post now (federation, crosspost.mode = agent_action); [] otherwise."""
         adapter = self._federation_adapter

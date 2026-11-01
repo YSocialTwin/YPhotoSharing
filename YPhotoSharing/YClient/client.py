@@ -361,9 +361,32 @@ class SimulationClient:
         )
         return registered_user
 
+    async def adopt_federated_account(self, account: Dict[str, Any]):
+        """Give an agent to an account the server created for the federation (INV-19). The stored account is the record
+        (nothing is created twice); the interests of the request and the opinions are initialised like for any new agent.
+        Returns the agent's record, or None when it cannot be built (the account is offered again)."""
+        uid = str(account["user_id"])
+        for agent in self._agents:
+            if str((getattr(agent, "user_data", {}) or {}).get("id")) == uid:
+                return agent.user_data
+        stored = account.get("user") or {}
+        if not stored:
+            return None
+        record = {k: v for k, v in stored.items() if v is not None}  # what the account lacks gets the client defaults
+        record["interests"] = list(account.get("interests") or [])
+        try:
+            round_id = await self.server.get_or_create_round.remote(self._current_day, self._current_hour)
+            return await self._register_agent_from_record(
+                normalize_agent_config(record, self.simulation_config), round_id=round_id, day=self._current_day)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"federation: could not adopt {account.get('username')}: {exc}")
+            return None
+
     async def run_round(self, day: int, hour: int) -> dict:
         round_id = await self.server.get_or_create_round.remote(day, hour)
         self._round_count += 1
+        self._current_day, self._current_hour = day, hour
+        await _federation.adopt_provisioned(self.server, self)  # agents for the accounts the federation created here (INV-19)
         if _federation.enabled():  # accounts that are not active on this platform do not act in this round
             self.round_planner.excluded_ids = await _federation.inactive_ids(self.server)
             await _federation.refresh_attention(self.server)

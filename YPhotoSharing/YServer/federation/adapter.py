@@ -151,6 +151,88 @@ class YPhotoSharingAdapter(BoundAccountsMixin, PlatformAdapter):
             return rid
         return self.host._db.get_or_create_round(self.host._current_day, self.host._current_hour)
 
+    # -- accounts created on request (protocol 1.2, INV-19) ---------------------------------
+    _PROFILE_TEXT = ("leaning", "language", "gender", "nationality", "profession", "toxicity", "education_level",
+                     "oe", "co", "ex", "ag", "ne")
+    # What an account gets when the request does not say (the same neutral values the client gives a new agent).
+    _DEFAULTS = {"user_type": "regular", "oe": "medium", "co": "medium", "ex": "medium", "ag": "medium", "ne": "medium",
+                 "language": "en", "gender": "unknown", "nationality": "", "leaning": "neutral", "toxicity": "no", "age": 0,
+                 "round_actions": 3, "daily_activity_level": 1, "owner": "federation",
+                 # photo-sharing profile: a public account without picture or bio, no archetype (the client may choose one)
+                 "is_private": False, "bio": "", "profile_picture_url": "", "archetype": None}
+
+    @classmethod
+    def _profile_of(cls, req):
+        """Account fields from the request payload (top level or nested in `profile`), over the defaults."""
+        source = dict(req.get("profile") or {}) if isinstance(req.get("profile"), dict) else {}
+        source.update({k: v for k, v in req.items() if k != "profile"})
+        out = dict(cls._DEFAULTS)
+        for key in cls._PROFILE_TEXT:
+            if source.get(key) not in (None, ""):
+                out[key] = str(source[key])
+        try:
+            if source.get("age") not in (None, ""):
+                out["age"] = int(source["age"])
+        except (TypeError, ValueError):
+            pass
+        return out
+
+    def provision_accounts(self, requests):
+        """Create the account of each agent that decided to join this platform (username = the agent's name) and tell which
+        were created. A name that is already an account here is bound as it is, never duplicated; the name of a person's
+        account or one that cannot be a username is skipped. The interests wait for the client that adopts the account."""
+        import json
+        import secrets
+
+        from YPhotoSharing.YServer.classes.models import User_mgmt
+        from .tables import FederationProvisioned
+
+        done = []
+        for req in requests:
+            gid, name = str(req["global_agent_id"]), str(req["username"])
+            with self._lock, self._session() as s:
+                user_id = s.scalar(select(User_mgmt.id).where(User_mgmt.username == name))
+            if user_id is not None and self.is_human(user_id):
+                log.warning("federation: %r is the account of a person, it is not provisioned", name)
+                continue
+            if user_id is None:
+                if not name or len(name) > 50:
+                    log.warning("federation: cannot create an account named %r (1-50 characters)", name)
+                    continue
+                user_id = str(uuid.uuid4())
+                self.host._db.create_user({"id": user_id, "username": name, "email": f"{name}@federation.local",
+                                           "password": secrets.token_hex(8), "joined_on": self._round_id(),
+                                           **self._profile_of(req)})
+                with self._lock, self._session() as s:
+                    s.merge(FederationProvisioned(user_id=user_id, global_agent_id=gid, username=name,
+                                                  interests_json=json.dumps([str(t) for t in (req.get("interests") or [])])[:1000]))
+                    s.commit()
+            self.record_provisioned(gid, user_id, name)
+            done.append({"global_agent_id": gid, "local_account_id": str(user_id)})
+        return done
+
+    def provisioned_accounts(self):
+        """[{user_id, username, interests, global_agent_id}] created here and not adopted by a client yet."""
+        import json
+
+        from .tables import FederationProvisioned
+
+        with self._lock, self._session() as s:
+            rows = s.scalars(select(FederationProvisioned).where(FederationProvisioned.adopted.is_(False))
+                             .order_by(FederationProvisioned.username)).all()
+            return [{"user_id": r.user_id, "username": r.username, "global_agent_id": r.global_agent_id,
+                     "interests": json.loads(r.interests_json or "[]")} for r in rows]
+
+    def mark_adopted(self, user_ids):
+        from .tables import FederationProvisioned
+
+        with self._lock, self._session() as s:
+            for uid in user_ids:
+                row = s.get(FederationProvisioned, str(uid))
+                if row is not None:
+                    row.adopted = True
+            s.commit()
+
     # -- membership --------------------------------------------------------------------
     def apply_membership(self, changes):
         from .tables import FederationMembership

@@ -7,7 +7,7 @@ federation_export:     photos handed to the bus, with tick and sequence number, 
 federation_state:      small key/value store.
 They live in a metadata of their own: the existing tables and their creation do not change."""
 
-from sqlalchemy import Column, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, Integer, String, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -109,6 +109,19 @@ class FederationHuman(Base):
 
     user_id = Column(String(36), primary_key=True)
     global_agent_id = Column(String(128), nullable=False, unique=True)
+
+
+class FederationProvisioned(Base):
+    """Accounts created here because the coordinator asked for them (INV-19): the agent of a client of another platform
+    decided to join. A client of this platform adopts each one (gives it an agent that acts); `adopted` tells which."""
+
+    __tablename__ = "federation_provisioned"
+
+    user_id = Column(String(36), primary_key=True)
+    global_agent_id = Column(String(64), nullable=False, unique=True)
+    username = Column(String(50), nullable=False)
+    interests_json = Column(String(1000), nullable=False, default="[]")
+    adopted = Column(Boolean, nullable=False, default=False)
 
 
 class FederationState(Base):
