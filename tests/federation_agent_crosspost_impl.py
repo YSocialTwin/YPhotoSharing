@@ -273,3 +273,54 @@ def test_ingest_attaches_existing_topics_case_insensitively_and_creates_missing_
         made = {t.name: (t.created_tick, t.source_member) for t in s.scalars(select(FederationTopic)).all()}
         assert made == {"Dogs": (3, "forum"), "Birds": (3, "micro")}
     assert a.ingest_inbox(3, [_topic_env(["cats", "Dogs", "DOGS", "  "], 0)]).duplicates == 1  # INV-05: nothing more is created
+
+
+# -- P3: the exposure of the agent to the foreign content it quotes ---------------------------------------
+def _foreign_share(host, emit=True):  # noqa: F811
+    from federation_bus_impl import crosspost
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+    from YPhotoSharing.YServer.federation.tables import FederationRef
+
+    a = agent_adapter(host, emit_exposures=emit)
+    assert a.ingest_inbox(0, [crosspost(0, U[1], "from the forum")]).materialized == 1
+    with Session(host._db.engine) as s:
+        foreign = s.scalar(select(FederationRef.local_id).where(FederationRef.local_kind == "photo"))
+    share = new_share(host, 2, foreign, "worth a look")
+    a.mark_for_export(share, [{"member": "forum", "text": "worth a look"}])
+    return a
+
+
+def test_quoting_foreign_content_sends_the_exposure_first_and_a_retry_is_identical(host):  # noqa: F811
+    a = _foreign_share(host)
+    out = a.export_outbox(3)
+    kinds = [e.payload_type for e in out]
+    assert kinds.index("exposure.v1") < kinds.index("crosspost.v1")
+    exp = next(e for e in out if e.payload_type == "exposure.v1")
+    assert (exp.payload["viewer_global_agent_id"], exp.payload["source_ref"], exp.payload["kind"], exp.payload["exact"]) == (
+        "g2", "ysocial://1/forum/post/0", "interact", True)
+    assert exp.payload["tick"] == 3 and exp.target_member == "coordinator" and len({e.seq for e in out}) == len(out)
+    again = a.export_outbox(3)
+    assert [e.fed_msg_id for e in again] == [e.fed_msg_id for e in out] and [e.payload for e in again] == [e.payload for e in out]
+    assert a.export_outbox(4) == []
+
+
+def test_the_exposure_is_not_repeated_when_the_agent_already_has_one(host):  # noqa: F811
+    from sqlalchemy.orm import Session
+    from YPhotoSharing.YServer.federation.tables import FederationExposure
+
+    a = _foreign_share(host)
+    with Session(host._db.engine) as s:
+        s.add(FederationExposure(tick=2, seq=0, viewer_uid=U[2], source_ref="ysocial://1/forum/post/0", kind="view", tie="none", exact=0))
+        s.commit()
+    assert [e for e in a.export_outbox(3) if e.payload_type == "exposure.v1"] == []
+
+
+def test_without_emit_exposures_and_for_native_quotes_no_exposure(host):  # noqa: F811
+    assert [e.payload_type for e in _foreign_share(host, emit=False).export_outbox(3)] == ["crosspost.v1"]
+
+
+def test_quoting_native_content_sends_no_exposure(host):  # noqa: F811
+    a = agent_adapter(host, emit_exposures=True)
+    a.mark_for_export(new_share(host, 1, new_photo(host, 2, "native"), "so true"), [{"member": "forum", "text": "so true"}])
+    assert [e.payload_type for e in a.export_outbox(3)] == ["crosspost.v1"]

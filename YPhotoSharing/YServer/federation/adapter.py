@@ -250,11 +250,55 @@ class YPhotoSharingAdapter(PlatformAdapter):
                     body["quoted"] = quoted
                 out.append(Envelope.create(self.federation_id, self.member, req.member, tick, req.seq, "crosspost.v1", body))
             if self.emit_exposures:
-                for row in self._exposure_rows(s, tick):
-                    out.append(Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out), default=-1) + 1, "exposure.v1", {
+                quoting = self._quote_pairs(s, asked)
+                rows = list(self._exposure_rows(s, tick))
+                if quoting:
+                    rows = rows + self._ensure_quote_exposures(s, tick, rows, quoting)
+                front = []
+                for row in rows:
+                    env = Envelope.create(self.federation_id, self.member, COORDINATOR, tick, max((e.seq for e in out + front), default=-1) + 1, "exposure.v1", {
                         "viewer_global_agent_id": self.agent_of(row.viewer_uid), "source_ref": row.source_ref, "tick": tick,
-                        "exact": bool(row.exact), "kind": row.kind, "tie": row.tie}))
+                        "exact": bool(row.exact), "kind": row.kind, "tie": row.tie})
+                    (front if (str(row.viewer_uid), row.source_ref) in quoting else out).append(env)
+                # P3: the exposure of the agent to the foreign content it quotes leaves before the cross-post that quotes it
+                first = min((i for i, e in enumerate(out) if e.payload_type == "crosspost.v1" and e.payload.get("quoted")), default=len(out))
+                out[first:first] = front
             return out
+
+    def _quote_pairs(self, s, asked):
+        """P3: {(viewer account, source_ref)} of the cross-posts that quote content materialised on this platform (seen here
+        by the quoting agent, who is neither a person nor inactive)."""
+        from YPhotoSharing.YServer.classes.models import Photo
+        from .tables import FederationRef
+
+        pairs = set()
+        for req in asked:
+            photo = s.get(Photo, req.photo_id)
+            quoted = self._quoted(s, photo)
+            if quoted is None or self.is_human(photo.user_id) or not self._active(s, photo.user_id):
+                continue
+            if s.scalar(select(FederationRef.local_id).where(FederationRef.local_kind == "photo", FederationRef.source_ref == quoted["source_ref"])) is not None:
+                pairs.add((str(photo.user_id), quoted["source_ref"]))
+        return pairs
+
+    def _ensure_quote_exposures(self, s, tick, rows, pairs):
+        """P3: an interact exposure (exact) for each (viewer, ref) pair with no exposure of that viewer to that content yet
+        (this tick or an earlier one), stored in the log after the rows of the tick so that a retry gives the same."""
+        from YPhotoSharing.YServer.classes.models import Photo
+        from .tables import FederationExposure, FederationRef
+
+        have = {(str(r.viewer_uid), r.source_ref) for r in s.scalars(select(FederationExposure).where(FederationExposure.tick <= tick)).all()}
+        seq = max((r.seq for r in rows), default=-1) + 1
+        added = []
+        for viewer, ref in sorted(pairs - have):
+            local = s.scalar(select(FederationRef.local_id).where(FederationRef.local_kind == "photo", FederationRef.source_ref == ref))
+            row = FederationExposure(tick=tick, seq=seq, viewer_uid=viewer, source_ref=ref, kind="interact",
+                                     tie=self._tie(s, viewer, s.get(Photo, local).user_id), exact=1)
+            s.add(row)
+            added.append(row)
+            seq += 1
+        s.commit()
+        return added
 
     def _quoted(self, s, photo):
         """F8: `quoted` of a photo that shares another one (None for any other photo): the original author, this platform

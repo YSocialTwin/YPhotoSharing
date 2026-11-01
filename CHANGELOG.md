@@ -5,6 +5,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ## [Unreleased]
 
 ### Added
+- Federation (P3, with `exposures`): when an agent quotes content materialised on this platform (a share with `crosspost_to`), the outbox also carries an `exposure.v1` (`interact`, exact) of that agent to the quoted content, before the cross-post, unless the agent already has one; kept in the exposure log so a retry sends the same messages. Persons are excluded. Without `exposures` nothing changes.
 - Human participation gateway (H5c): `YPhotoSharing/YGateway` with `run_gateway.py` (HTTP on loopback, token) and `run_offline_gateway.py` (server stopped, file lock); people publish, share, comment, react and follow through the same layers as the server, and may ask a cross-post (`crosspost_to`, as the agents do). Accounts are `user_type = human` with identity `human:<key>` (`federation_human`); they are outside attention, the affective report and churn, and `agent_of` never falls back to the local id for them. Server methods `human_context` and `human_ensure`. See docs/human-gateway.md.
 - Fixed `get_comments`, which filtered on the joined round table and failed.
 - Federation topic migration: cross-posted photos attach the topics they carry, matching existing topics case-insensitively and creating the missing ones (recorded in `federation_topic`); a share exports the topics of the original photo.
