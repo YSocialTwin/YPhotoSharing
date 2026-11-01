@@ -28,6 +28,7 @@ from ysocial_federation.schemas import TEXT_EXCERPT_MAX
 from ysocial_federation.timebase import ZERO_BASED
 
 log = logging.getLogger("yphotosharing.federation")
+HUMAN_PREFIX = "human:"  # identities of people; never take part in attention, churn, leave or discovery (INV-15)
 
 
 class YPhotoSharingAdapter(PlatformAdapter):
@@ -51,6 +52,7 @@ class YPhotoSharingAdapter(PlatformAdapter):
         self._by_user = {v: k for k, v in self._accounts.items()}
         self._lock = threading.RLock()
         self._inactive = None  # cache of the ids that are not active; loaded from the table on first use
+        self._humans = None  # {local user id: "human:..."}; loaded from federation_human on first use (H5c)
 
     # -- clock -------------------------------------------------------------------------
     def to_tick(self, local_round):
@@ -62,10 +64,56 @@ class YPhotoSharingAdapter(PlatformAdapter):
 
     # -- identity and database ---------------------------------------------------------
     def user_of(self, global_agent_id):
-        return self._accounts.get(str(global_agent_id), str(global_agent_id))
+        gid = str(global_agent_id)
+        if gid in self._accounts:
+            return self._accounts[gid]
+        if gid.startswith(HUMAN_PREFIX):
+            for uid, hid in self._human_map().items():
+                if hid == gid:
+                    return uid
+        return gid
 
     def agent_of(self, user_id):
-        return self._by_user.get(str(user_id), str(user_id))
+        uid = str(user_id)
+        if uid in self._by_user:
+            return self._by_user[uid]
+        human = self._human_map().get(uid)  # a person never takes the local id as global identity (could clash with an agent)
+        return human if human is not None else uid
+
+    # -- human participants (H5c) --------------------------------------------------------
+    def _human_map(self):
+        with self._lock:
+            if self._humans is None:
+                if self.host is None:
+                    self._humans = {}
+                else:
+                    from .tables import FederationHuman
+
+                    with self._session() as s:
+                        self._humans = {r.user_id: r.global_agent_id for r in s.scalars(select(FederationHuman)).all()}
+            return self._humans
+
+    def register_human(self, user_id, global_agent_id):
+        """Record that the local account `user_id` is the person `global_agent_id` (`human:...`); idempotent."""
+        from .tables import FederationHuman
+
+        gid = str(global_agent_id)
+        if not gid.startswith(HUMAN_PREFIX) or len(gid) == len(HUMAN_PREFIX):
+            raise ValueError("a human identity starts with 'human:'")
+        with self._lock, self._session() as s:
+            row = s.get(FederationHuman, str(user_id))
+            if row is None:
+                other = s.scalar(select(FederationHuman).where(FederationHuman.global_agent_id == gid))
+                if other is not None and other.user_id != str(user_id):
+                    raise ValueError(f"{gid} is already the account {other.user_id}")
+                s.add(FederationHuman(user_id=str(user_id), global_agent_id=gid))
+            elif row.global_agent_id != gid:
+                raise ValueError(f"account {user_id} is already {row.global_agent_id}")
+            s.commit()
+            self._humans = None
+
+    def is_human(self, user_id):
+        return str(user_id) in self._human_map()
 
     def _session(self):
         from .tables import ensure_tables
@@ -220,7 +268,7 @@ class YPhotoSharingAdapter(PlatformAdapter):
         if original is None:
             return None
         author = s.get(User_mgmt, original.user_id)
-        gid = self._by_user.get(str(original.user_id))
+        gid = self._by_user.get(str(original.user_id)) or self._human_map().get(str(original.user_id))
         ref = s.scalar(select(FederationRef.source_ref).where(FederationRef.local_kind == "photo", FederationRef.local_id == original.id))
         ref = ref or f"ysocial://{self.federation_id}/{self.member}/photo/{original.id}"
         return fed_quoted.build(author.username if author is not None else "unknown", gid, self.member, ref, original.caption)
@@ -421,6 +469,8 @@ class YPhotoSharingAdapter(PlatformAdapter):
             for m in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")
                                .order_by(FederationMembership.user_id)).all():
                 uid = m.user_id
+                if str(m.global_agent_id).startswith(HUMAN_PREFIX) or self.is_human(uid):
+                    continue  # people have no stress/reward model (INV-15)
                 agg = self.host._db._compute_stress_reward_aggregate(s, uid, last, 24)
                 photos = s.scalar(select(func.count(Photo.id)).where(Photo.user_id == uid, Photo.round.in_(ids)))
                 reacts = s.scalar(select(func.count(Reaction.id)).where(Reaction.user_id == uid, Reaction.round.in_(ids)))
@@ -445,6 +495,8 @@ class YPhotoSharingAdapter(PlatformAdapter):
             rounds = set(s.scalars(select(Round.id).where(Round.day <= int(day))).all())
             out = []
             for row in s.scalars(select(FederationMembership).where(FederationMembership.state == "active")).all():
+                if str(row.global_agent_id).startswith(HUMAN_PREFIX):
+                    continue  # a person leaving the platform is not churn (INV-15)
                 user = s.get(User_mgmt, row.user_id)
                 if user is not None and user.left_on is not None and user.left_on in rounds:
                     out.append(row.global_agent_id)
@@ -461,6 +513,8 @@ class YPhotoSharingAdapter(PlatformAdapter):
             known = set(s.scalars(select(User_mgmt.id)).all())
             s.query(FederationAttention).delete()
             for gid, value in sorted((multipliers or {}).items()):
+                if str(gid).startswith(HUMAN_PREFIX):
+                    continue  # no attention multiplier for people (INV-15)
                 uid = self.user_of(gid)
                 if uid in known and float(value) != 1.0:
                     s.add(FederationAttention(user_id=uid, day=int(day), multiplier=float(value)))

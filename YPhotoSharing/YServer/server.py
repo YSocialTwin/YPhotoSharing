@@ -448,6 +448,20 @@ class OrchestratorServer:
             return []
         return adapter.destination_members(user_id)
 
+    # -- human participation (H5c): used by the human gateway (YGateway) --------------------
+    def human_context(self) -> dict:
+        """Round in which a person's action is recorded, without moving the server's own round."""
+        rid = self.current_round_id or self._db.get_or_create_round(self._current_day, self._current_hour)
+        adapter = self._federation_adapter
+        return {"round_id": rid, "day": self._current_day, "hour": self._current_hour, "federated": adapter is not None,
+                "crosspost_mode": getattr(adapter, "crosspost_mode", None)}
+
+    def human_ensure(self, human_key: str, username: str = None, language: str = None) -> dict:
+        """Create (idempotent) the account of a person; with a federation it also registers the `human:` identity."""
+        from YPhotoSharing.YGateway.humans import ensure_human
+
+        return ensure_human(self._db, self._federation_adapter, self.human_context()["round_id"], human_key, username, language)
+
     def get_federation_inactive_agents(self) -> List[str]:
         """Local ids of the accounts that are not active on this platform (federation); [] standalone."""
         if self._federation_adapter is None:

@@ -24,6 +24,7 @@ nav:
   - Remaining Gaps: remaining_gaps.md
   - Experiments & Presets: experiments.md
   - YSimulator Alignment: ysimulator_alignment.md
+  - Human Gateway: human-gateway.md
 
 markdown_extensions:
   - admonition

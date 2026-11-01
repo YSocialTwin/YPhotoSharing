@@ -102,6 +102,15 @@ class FederationTopic(Base):
     source_member = Column(String(64), nullable=False)
 
 
+class FederationHuman(Base):
+    """H5c: accounts of human participants and their federation identity (`human:...`), registered by the human gateway."""
+
+    __tablename__ = "federation_human"
+
+    user_id = Column(String(36), primary_key=True)
+    global_agent_id = Column(String(128), nullable=False, unique=True)
+
+
 class FederationState(Base):
     __tablename__ = "federation_state"
 
