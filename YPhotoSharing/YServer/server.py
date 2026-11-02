@@ -461,6 +461,13 @@ class OrchestratorServer:
             return []
         return adapter.destination_members(user_id)
 
+    def get_federation_destination_info(self, user_id: str) -> List[dict]:
+        """P15: the destinations with their platform type and name ([{member, platform, name}]); several members may share a type."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_info"):
+            return []
+        return adapter.destination_info(user_id)
+
     # -- human participation (H5c): used by the human gateway (YGateway) --------------------
     def human_context(self) -> dict:
         """Round in which a person's action is recorded, without moving the server's own round."""

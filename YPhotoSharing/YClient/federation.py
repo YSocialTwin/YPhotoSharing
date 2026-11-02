@@ -18,7 +18,7 @@ import re
 import threading
 
 _state = {"enabled": False, "propensity": 0.0, "rng": None, "inactive": set(), "attention": {},
-          "mode": "coordinator_rule", "member": None, "adopt": False, "decision": "random",
+          "mode": "coordinator_rule", "member": None, "peers": {}, "label": None, "adopt": False, "decision": "random",
           "triggers": ("publish", "interaction"), "max_per_day": 5, "content": frozenset(), "counts": {}}
 
 # Longest text each destination accepts (characters); the rules and the parser of an LLM reply both apply them.
@@ -29,12 +29,12 @@ def install(config):
     """Read config["federation"]; call once when the client starts."""
     section = (config or {}).get("federation") or {}
     enabled = bool(section.get("enabled"))
-    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={}, mode="coordinator_rule", member=None,
+    _state.update(enabled=enabled, propensity=0.0, rng=None, inactive=set(), attention={}, mode="coordinator_rule", member=None, peers={}, label=None,
                   adopt=False, decision="random", triggers=("publish", "interaction"), max_per_day=5, content=frozenset(),
                   counts={})
     if enabled:
         _state.update(propensity=float(section.get("crosspost_propensity", 0.0)), rng=random.Random(section.get("seed", 0)),
-                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"),
+                      mode=str(section.get("crosspost_mode") or "coordinator_rule"), member=section.get("member"), label=section.get("name"),
                       adopt=bool(section.get("adopt")))
         _state.update(read_decision(section))
     return enabled
@@ -117,18 +117,45 @@ def agent_action():
 async def destinations(server, user_id):
     """Platforms where this agent can post now (the server tells; empty when it cannot be reached)."""
     try:
+        try:  # P15: member, platform and name of each destination
+            info = await server.get_federation_destination_info.remote(str(user_id))
+            _learn(info)
+            return sorted(str(i["member"]) for i in info)
+        except Exception:  # noqa: BLE001 - a server without it: the member names only
+            pass
         return sorted(str(m) for m in await server.get_federation_destinations.remote(str(user_id)))
     except Exception:  # noqa: BLE001 - no destination known: no cross-post this time
         return []
 
 
 def source_platform():
-    return _state["member"] or "another platform"
+    return _state.get("label") or _state["member"] or "another platform"
+
+
+def platform_of(dest):
+    """Platform type of a destination member (P15: several members may share a type; the member name is then
+    `<platform>-<id>`). The server answers it with the destinations; without it the member name is the type (older worlds)."""
+    return (_state["peers"].get(str(dest)) or {}).get("platform") or str(dest)
+
+
+def _learn(items):
+    """Remember the platform and the name of each destination the server listed (additive fields `platform`, `name`)."""
+    for it in items or ():
+        if isinstance(it, dict) and it.get("member") and it.get("platform"):
+            _state["peers"][str(it["member"])] = {"platform": str(it["platform"]), "name": str(it.get("name") or it["member"])}
+
+
+def _destination_line(dest):
+    kind = platform_of(dest)
+    name = (_state["peers"].get(str(dest)) or {}).get("name")
+    if kind == str(dest) and (not name or name == str(dest)):
+        return f"- {dest} ({LIMITS.get(kind, 280)})"  # a member named after its type: the line of a single-type world
+    return f"- {dest} ({name or dest}, {kind}, {LIMITS.get(kind, 280)})"
 
 
 def adapt_prompt_key(dest):
     """Prompt-store key that adapts a text for the destination platform (None for a platform without one)."""
-    return f"crosspost_adapt_{dest}" if dest in LIMITS else None
+    return f"crosspost_adapt_{platform_of(dest)}" if platform_of(dest) in LIMITS else None
 
 
 def _cut(text, limit):
@@ -141,6 +168,7 @@ def _cut(text, limit):
 
 def rule_text(dest, text):
     """The text for the destination without an LLM: the same words, shaped and cut for the platform."""
+    dest = platform_of(dest)
     text = " ".join(str(text or "").split()) if dest != "forum" else str(text or "").strip()
     if dest == "forum" and "\n" not in text:
         title = _cut(re.split(r"(?<=[.!?])\s", text, maxsplit=1)[0], 80)
@@ -151,6 +179,7 @@ def rule_text(dest, text):
 def parse_reply(dest, reply, fallback=None):
     """Clean the reply of a model asked to adapt a text: no reasoning block, fences, labels or quotes; at most the
     platform limit; for a forum a title line then a body. The fallback (default: nothing) when little is left."""
+    dest = platform_of(dest)
     text = re.sub(r"<think>.*?</think>", "", str(reply or ""), flags=re.S | re.I)
     text = re.sub(r"^```[a-z]*\n?|```$", "", text.strip(), flags=re.M).strip()
     text = re.sub(r"^(post|caption|message|text|testo|didascalia|messaggio|frase)\s*:\s*", "", text, flags=re.I).strip()
@@ -205,7 +234,7 @@ async def _adapt(llm_service, dest, text):
     if llm_service is None or adapt_prompt_key(dest) is None:
         return None
     try:
-        return parse_reply(dest, await llm_service.adapt_crosspost.remote(dest, text, source_platform()))
+        return parse_reply(dest, await llm_service.adapt_crosspost.remote(platform_of(dest), text, source_platform()))
     except Exception:  # noqa: BLE001 - a failing model must not stop the post
         return None
 
@@ -364,7 +393,7 @@ def parse_decision(reply, allowed):
 
 def destination_lines(dests):
     """The destinations as lines for the prompt: `- forum (2000)`, the number being the longest text in characters."""
-    return "\n".join(f"- {d} ({LIMITS.get(d, 280)})" for d in dests)
+    return "\n".join(_destination_line(d) for d in dests)
 
 
 def _note(user_id, trigger, source, crosspost, dests, reason=""):

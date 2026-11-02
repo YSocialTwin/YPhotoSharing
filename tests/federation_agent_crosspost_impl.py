@@ -324,3 +324,38 @@ def test_quoting_native_content_sends_no_exposure(host):  # noqa: F811
     a = agent_adapter(host, emit_exposures=True)
     a.mark_for_export(new_share(host, 1, new_photo(host, 2, "native"), "so true"), [{"member": "forum", "text": "so true"}])
     assert [e.payload_type for e in a.export_outbox(3)] == ["crosspost.v1"]
+
+
+# -- P15: several members of the same platform type ------------------------------------------------------------
+INFO = [{"member": "microblogging-1", "platform": "microblogging", "name": "Alpha"},
+        {"member": "microblogging-2", "platform": "microblogging", "name": "Beta"},
+        {"member": "forum", "platform": "forum", "name": "forum"}]
+
+
+def test_p15_the_client_learns_platform_and_name_of_each_member():
+    async def info(user_id):
+        return INFO
+
+    server = SimpleNamespace(get_federation_destination_info=_remote(info))
+    federation.install({"federation": dict(enabled=True, seed=3, member="photos", name="Photos exp")})
+    assert run(federation.destinations(server, "u")) == ["forum", "microblogging-1", "microblogging-2"]
+    assert federation.platform_of("microblogging-2") == "microblogging"
+    assert federation.adapt_prompt_key("microblogging-1") == "crosspost_adapt_microblogging"
+    assert "Beta" in federation._destination_line("microblogging-2")
+    federation.install({})
+
+
+def test_p15_a_server_without_the_new_method_still_works():
+    federation.install({"federation": dict(enabled=True, seed=3, member="photos")})
+    assert run(federation.destinations(_server(["forum", "dating"]), "u")) == ["dating", "forum"]
+    assert federation.platform_of("forum") == "forum"
+    federation.install({})
+
+
+def test_p15_the_server_and_adapter_report_platform_and_name(host):  # noqa: F811
+    a = agent_adapter(host)
+    a.set_destinations({"g1": [{"member": "microblogging-1", "local_account_id": "1", "platform": "microblogging", "name": "Alpha"},
+                               {"member": "microblogging-2", "local_account_id": "2", "platform": "microblogging", "name": "Beta"}]})
+    assert a.destination_members(U[1]) == ["microblogging-1", "microblogging-2"]
+    assert [(i["member"], i["platform"], i["name"]) for i in a.destination_info(U[1])] == [
+        ("microblogging-1", "microblogging", "Alpha"), ("microblogging-2", "microblogging", "Beta")]
