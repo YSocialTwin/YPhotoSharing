@@ -352,6 +352,20 @@ class LLMService:
         return self._render("generate_caption", persona=persona, topic=topic,
                             day=day, slot=slot, mention_instruction=mention_instruction)
 
+    def decide_crosspost(self, trigger: str, text: str, destinations: str, name: str = "", action: str = "share",
+                         cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
+        """The raw reply of the model to the cross-post decision (crosspost.decision = llm: a JSON object, read by
+        federation.parse_decision). Errors propagate: the client then falls back to the Bernoulli draw."""
+        if trigger == "interaction":
+            phrase = prompt_store.prompt("crosspost_decide_interaction",
+                                         action=prompt_store.get("crosspost_decide_action_" + action))
+        else:
+            phrase = prompt_store.get("crosspost_decide_publish")
+        message = prompt_store.prompt("crosspost_decide", name=name, profile=self._build_persona(cluster_id, agent_attrs),
+                                      trigger=phrase, text=text, destinations=destinations)
+        chain = ChatPromptTemplate.from_messages([("human", "{message}")]) | self.llm | self._parser
+        return chain.invoke({"message": message}).strip()
+
     def adapt_crosspost(self, dest: str, text: str, source_platform: str = "") -> str:
         """The agent's caption rewritten for another platform (cross-post as an agent action); "" when it fails."""
         try:

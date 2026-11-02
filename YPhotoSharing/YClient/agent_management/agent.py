@@ -273,7 +273,7 @@ class Agent:
         elif action == "follow":
             return await self._action_follow(round_id)
         elif action == "share":
-            return await self._action_share(round_id)
+            return await self._action_share(round_id, day)
         elif action == "report":
             return await self._action_report(round_id)
         elif action == "save":
@@ -428,7 +428,7 @@ class Agent:
         )
         return {"follow_decision": decision, "target_user_id": target.get("id")}
 
-    async def _action_share(self, round_id: str) -> Optional[dict]:
+    async def _action_share(self, round_id: str, day: Optional[int] = None) -> Optional[dict]:
         return await share_photo(
             self.server,
             user_id=self.user_id,
@@ -439,6 +439,7 @@ class Agent:
             llm_service=self.llm_service,
             agent_attrs=self.user_data,
             cluster_id=self.cluster_id,
+            day=day,
         )
 
     async def _action_report(self, round_id: str) -> Optional[dict]:
