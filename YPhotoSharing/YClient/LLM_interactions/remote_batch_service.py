@@ -15,6 +15,10 @@ import ray
 import requests
 from langchain_ollama import ChatOllama
 
+from YPhotoSharing.YClient.LLM_interactions.chat_model import (
+    ollama_client_kwargs,
+    uses_openai_protocol,
+)
 from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
 from YPhotoSharing import prompt_store
 
@@ -93,6 +97,9 @@ class _OllamaAdapter:
         }
         if "timeout" in config:
             kwargs["timeout"] = config["timeout"]
+        client_kwargs = ollama_client_kwargs(config)
+        if client_kwargs:
+            kwargs["client_kwargs"] = client_kwargs
         self._chat = ChatOllama(**kwargs)
 
     def generate(self, prompts: List[str], temperature: float = 0.7,
@@ -197,10 +204,15 @@ def _probe_openai_batch(config: Dict[str, Any]) -> bool:
 
 def _probe_ollama_batch(config: Dict[str, Any]) -> bool:
     try:
+        probe_kwargs = {}
+        client_kwargs = ollama_client_kwargs(config)
+        if client_kwargs:
+            probe_kwargs["client_kwargs"] = client_kwargs
         chat = ChatOllama(
             model=config["model"],
             temperature=0.0,
             base_url=_ollama_base_url(config),
+            **probe_kwargs,
         )
         result = chat.batch(["OK.", "OK."])
         return isinstance(result, list) and len(result) == 2
@@ -218,6 +230,9 @@ def resolve_provider(config: Dict[str, Any]) -> Optional[str]:
 
     if api_format != "auto":
         order = [api_format]
+    elif uses_openai_protocol(config) and backend != "ollama":
+        # A hosted OpenAI-compatible provider (API key or https) does not speak Ollama's native API.
+        order = ["openai"]
     elif backend == "ollama":
         order = ["ollama", "openai"]
     else:
