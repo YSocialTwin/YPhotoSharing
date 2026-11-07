@@ -5,7 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
+
+
+pytest.importorskip("ysocial_federation", reason="the federation SDK is not installed")
 
 
 def test_federation_agent_crosspost_in_isolation():
