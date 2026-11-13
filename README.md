@@ -155,6 +155,10 @@ python scripts/export_network.py --db example/yphotosharing.db --out example/exp
 python scripts/export_content_cascade.py --db example/yphotosharing.db --out example/exports/
 ```
 
+## Human participation
+
+People can take part through a local gateway, online (`run_gateway.py`) or with the server stopped (`run_offline_gateway.py`); see [docs/human-gateway.md](docs/human-gateway.md).
+
 ## Configuration
 
 Configure your experiment: navigate to the `example/` directory. Modify `server_config.json`, `client_config.json`, `agents.json`, and `prompts_ygram.json` to define your population size, LLM endpoints, prompt templates, and simulation length. The `agents.json` file follows the YSimulator-style `agents` / `generation_config` layout and accepts the same demographic, personality, opinion, and activity fields, plus photo-sharing extras such as `photo_sharing.cover_image`, `photo_sharing.story_visibility`, and `photo_sharing.creator_tier`. `story_visibility` supports `public`, `followers`, and `private`, while `creator_tier` can be used to distinguish standard creators from higher-profile accounts such as `pro` or `influencer`; both fields are included in the prompt persona and can bias story/post generation and visibility-related behavior. The prompt persona is then enriched with the full record, so fields like `custom_features` and `photo_sharing.favorite_filters` can influence generation without needing a separate `cluster` field. Lifecycle settings such as churn and new-user injection are controlled from `client_config.json` under `simulation.agents` and are disabled by default. Ensure your `client_config.json` includes simulation parameters for features like `opinion_dynamics` and `discussion_topics` if you wish to use them. The annotation toggles are also exposed here: `simulation.enable_sentiment`, `simulation.enable_emotion_annotation`, `simulation.enable_toxicity`, and `simulation.perspective_api_key`.

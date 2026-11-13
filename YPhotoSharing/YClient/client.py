@@ -23,6 +23,7 @@ import ray
 
 from YPhotoSharing.common_utils import build_structured_file_logger, setup_logging
 from YPhotoSharing.YClient.agent_management.agent import Agent
+from YPhotoSharing.YClient import federation as _federation
 from YPhotoSharing.YClient.simulation.bootstrap import (
     build_initial_interest_ids,
     normalize_agent_config,
@@ -129,6 +130,7 @@ class SimulationClient:
         self._current_hour = 0
         self._run_id = str(uuid.uuid4())
         self.round_planner = SimulationRoundPlanner(self.simulation_config)
+        _federation.install(self.simulation_config)
         self.lifecycle_manager = None
 
         global logger
@@ -234,6 +236,7 @@ class SimulationClient:
         self._current_day = server_meta["current_day"]
         self._current_hour = server_meta["current_hour"]
         self._run_id = server_meta.get("run_id", str(uuid.uuid4()))
+        self._federated = bool(server_meta.get("federated", False))
         logger.info(f"Client {self.client_id} registered. Server run_id={self._run_id}")
 
     async def load_agents(self, user_configs) -> int:
@@ -358,9 +361,35 @@ class SimulationClient:
         )
         return registered_user
 
+    async def adopt_federated_account(self, account: Dict[str, Any]):
+        """Give an agent to an account the server created for the federation (INV-19). The stored account is the record
+        (nothing is created twice); the interests of the request and the opinions are initialised like for any new agent.
+        Returns the agent's record, or None when it cannot be built (the account is offered again)."""
+        uid = str(account["user_id"])
+        for agent in self._agents:
+            if str((getattr(agent, "user_data", {}) or {}).get("id")) == uid:
+                return agent.user_data
+        stored = account.get("user") or {}
+        if not stored:
+            return None
+        record = {k: v for k, v in stored.items() if v is not None}  # what the account lacks gets the client defaults
+        record["interests"] = list(account.get("interests") or [])
+        try:
+            round_id = await self.server.get_or_create_round.remote(self._current_day, self._current_hour)
+            return await self._register_agent_from_record(
+                normalize_agent_config(record, self.simulation_config), round_id=round_id, day=self._current_day)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"federation: could not adopt {account.get('username')}: {exc}")
+            return None
+
     async def run_round(self, day: int, hour: int) -> dict:
         round_id = await self.server.get_or_create_round.remote(day, hour)
         self._round_count += 1
+        self._current_day, self._current_hour = day, hour
+        await _federation.adopt_provisioned(self.server, self)  # agents for the accounts the federation created here (INV-19)
+        if _federation.enabled():  # accounts that are not active on this platform do not act in this round
+            self.round_planner.excluded_ids = await _federation.inactive_ids(self.server)
+            await _federation.refresh_attention(self.server)
 
         start_time = time.time()
         all_results = await self._run_agents_async(day, hour, round_id)
@@ -443,7 +472,19 @@ class SimulationClient:
             )
 
         await self.server.ready_for_next_round.remote(self.client_id)
+        if getattr(self, "_federated", False):
+            await self._wait_for_round_open()
         return summary
+
+    async def _wait_for_round_open(self, poll_seconds: float = 0.05) -> None:
+        """Federation: the next round opens only when the coordinator allows it (the clock of the other platforms)."""
+        while await self.server.round_pending.remote():
+            await asyncio.sleep(poll_seconds)
+
+    async def finish(self) -> None:
+        """Tell the server this client has played all its rounds (only matters in a federation)."""
+        if getattr(self, "_federated", False):
+            await self.server.finish_client.remote(self.client_id)
 
     async def _run_agents_async(self, day: int, hour: int, round_id: str) -> List[list]:
         active_agents = self.round_planner.select_active_agents(self._agents, hour)

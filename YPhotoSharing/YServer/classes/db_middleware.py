@@ -591,7 +591,7 @@ class DatabaseMiddleware:
             rows = (
                 session.query(Comment)
                 .join(Round, Round.id == Comment.round)
-                .filter_by(photo_id=photo_id, is_deleted=False, parent_comment_id=None)
+                .filter(Comment.photo_id == photo_id, Comment.is_deleted.is_(False), Comment.parent_comment_id.is_(None))
                 .order_by(Round.day.asc(), Round.hour.asc(), Comment.created_at)
                 .limit(limit)
                 .offset(offset)

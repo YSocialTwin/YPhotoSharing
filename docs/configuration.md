@@ -176,7 +176,7 @@ The affective dynamics module accepts a `stress_reward` section either at the to
       "system": {
         "churn": {
           "enabled": true,
-          "stress_weight": 1.5,
+          "stress_weight": 2.0,
           "reward_weight": 1.0
         }
       }

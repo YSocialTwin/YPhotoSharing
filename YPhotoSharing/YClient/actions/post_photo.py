@@ -14,6 +14,7 @@ from YPhotoSharing.common_utils import strip_wrapping_quotes
 from YPhotoSharing.YClient.LLM_interactions.image_generation_service import ImageGenerationService
 from YPhotoSharing.YClient.actions.rule_based_actions import generate_rule_based_caption
 from YPhotoSharing.YClient.text_processing import annotate_content
+from YPhotoSharing.YClient import federation as _federation
 
 logger = logging.getLogger(__name__)
 
@@ -142,13 +143,15 @@ async def post_photo(
         "location_name": location_name,
         "topic": topic,
         "topics": [topic],
+        **(await _federation.post_fields_async(server, user_id, caption, llm_service if is_llm_agent else None, day=day, agent_attrs=agent_attrs, cluster_id=cluster_id)),  # {} unless the federation is on and the agent chose to cross-post
     }
-    annotations = await _build_annotations(caption, agent_attrs, llm_service)
-
     try:
+        # The photo is published first: the annotations (an LLM call for the emotions) can be slow and
+        # are attached afterwards, so a slow annotation never delays or loses the post.
         photo_id = await server.post_photo.remote(photo_data)
 
         try:
+            annotations = await _build_annotations(caption, agent_attrs, llm_service)
             topic_ids = []
             if getattr(server, "get_photo_topics", None) is not None:
                 topic_ids = await server.get_photo_topics.remote(photo_id)

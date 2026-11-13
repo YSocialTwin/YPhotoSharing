@@ -15,9 +15,10 @@ os.environ.setdefault("LANGCHAIN_VERBOSE", "false")
 import ray
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_ollama import ChatOllama
+from langchain_ollama import ChatOllama  # noqa: F401  (kept for code that patches it)
 
 from YPhotoSharing.common_utils import build_structured_file_logger
+from YPhotoSharing.YClient.LLM_interactions.chat_model import build_chat_model
 from YPhotoSharing.YClient.LLM_interactions.usage_tracker import LLMUsageTracker
 from YPhotoSharing import prompt_store
 
@@ -212,19 +213,12 @@ class LLMService:
                 include_module=False,
                 propagate=False,
             )
-        base_url = _build_ollama_url(llm_config)
-        self.llm = ChatOllama(
-            model=llm_config.get("model", "llama3.2"),
-            temperature=llm_config.get("temperature", 0.7),
-            base_url=base_url,
-        )
+        # Protocol, scheme and API key follow the configuration (hosted providers need https and a key).
+        self.llm = build_chat_model(llm_config, default_model="llama3.2", default_temperature=0.7)
         self.llm_v = None
         if llm_v_config:
-            v_url = _build_ollama_url(llm_v_config)
-            self.llm_v = ChatOllama(
-                model=llm_v_config.get("model", "llava"),
-                temperature=llm_v_config.get("temperature", 0.5),
-                base_url=v_url,
+            self.llm_v = build_chat_model(
+                llm_v_config, default_model="llava", default_temperature=0.5
             )
         self._parser = StrOutputParser()
         self._setup_logger(logging_config)
@@ -351,6 +345,30 @@ class LLMService:
             
         return self._render("generate_caption", persona=persona, topic=topic,
                             day=day, slot=slot, mention_instruction=mention_instruction)
+
+    def decide_crosspost(self, trigger: str, text: str, destinations: str, name: str = "", action: str = "share",
+                         cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
+        """The raw reply of the model to the cross-post decision (crosspost.decision = llm: a JSON object, read by
+        federation.parse_decision). Errors propagate: the client then falls back to the Bernoulli draw."""
+        if trigger == "interaction":
+            phrase = prompt_store.prompt("crosspost_decide_interaction",
+                                         action=prompt_store.get("crosspost_decide_action_" + action))
+        else:
+            phrase = prompt_store.get("crosspost_decide_publish")
+        message = prompt_store.prompt("crosspost_decide", name=name, profile=self._build_persona(cluster_id, agent_attrs),
+                                      trigger=phrase, text=text, destinations=destinations)
+        chain = ChatPromptTemplate.from_messages([("human", "{message}")]) | self.llm | self._parser
+        return chain.invoke({"message": message}).strip()
+
+    def adapt_crosspost(self, dest: str, text: str, source_platform: str = "") -> str:
+        """The agent's caption rewritten for another platform (cross-post as an agent action); "" when it fails."""
+        try:
+            message = prompt_store.prompt(f"crosspost_adapt_{dest}", source_platform=source_platform, text=text)
+            chain = ChatPromptTemplate.from_messages([("human", "{message}")]) | self.llm | self._parser
+            return chain.invoke({"message": message}).strip()
+        except Exception as exc:
+            logger.warning(f"cross-post adaptation failed: {exc}")
+            return ""
 
     def decide_reaction(self, caption: str, cluster_id: int = 0, agent_attrs: Optional[dict] = None) -> str:
         """Decide how to react to a photo (LIKE / LOVE / LAUGH / WOW / SAD / ANGRY / IGNORE)."""

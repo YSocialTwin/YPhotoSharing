@@ -202,6 +202,16 @@ class OrchestratorServer:
             perspective_api_key=self.simulation.get("perspective_api_key"),
         )
 
+        # Federation (opt-in): None means standalone, exactly as before.
+        self._federation_gate = None
+        self._federation_adapter = None  # set by build_gate; the invisibility filters below read it
+        self._advance_pending = False  # the gate held the round back; the clients poll round_pending()
+        self._finished_clients = set()
+        if (self.config.get("federation") or {}).get("enabled"):
+            from YPhotoSharing.YServer.federation import build_gate
+
+            self._federation_gate = build_gate(self, self.config)
+
         logger.info(f"OrchestratorServer '{server_name}' ready (run_id={self._run_id})")
 
     def register_client(self, client_id: str, client_info: dict) -> dict:
@@ -219,6 +229,7 @@ class OrchestratorServer:
             "simulation_config": self.simulation,
             "current_day": self._current_day,
             "current_hour": self._current_hour,
+            "federated": self._federation_gate is not None,
         }
 
     def heartbeat(self, client_id: str) -> dict:
@@ -239,9 +250,34 @@ class OrchestratorServer:
         self._round_ready[client_id] = True
         all_ready = all(self._round_ready.get(cid, False) for cid in self._registered_clients)
         if all_ready and len(self._registered_clients) >= self.min_to_start:
-            self._advance_round()
-            self._round_ready = {}
+            self._try_advance()
         return all_ready
+
+    def _try_advance(self) -> None:
+        """Advance when every client is ready; with a federation gate also when the coordinator allows it."""
+        gate = self._federation_gate
+        if gate is not None and not gate.on_barrier_ready((self._current_day, self._current_hour)):
+            self._advance_pending = True
+            return
+        self._advance_pending = False
+        self._advance_round()
+        self._round_ready = {}
+        if gate is not None:
+            gate.on_round_opened((self._current_day, self._current_hour))
+
+    def round_pending(self) -> bool:
+        """True while the federation gate holds the round back (always False standalone). Asking again retries
+        the advance: the clients wait for the round by polling this."""
+        if self._advance_pending:
+            self._try_advance()
+        return self._advance_pending
+
+    def finish_client(self, client_id: str) -> bool:
+        """A client has played all its rounds; when every client has, the federation is told this member is done."""
+        self._finished_clients.add(client_id)
+        if self._federation_gate is not None and self._finished_clients >= set(self._registered_clients):
+            self._federation_gate.on_finished()
+        return True
 
     def _advance_round(self):
         self._current_hour += 1
@@ -317,7 +353,18 @@ class OrchestratorServer:
         return self._db.get_following(user_id)
 
     def post_photo(self, photo_data: dict) -> str:
-        return self.social_action_service.post_photo(photo_data)
+        crosspost, targets = False, None
+        if "crosspost" in photo_data or "crosspost_to" in photo_data:  # the agent's choice to cross-post (federation, D-07); not columns
+            photo_data = dict(photo_data)
+            crosspost = bool(photo_data.pop("crosspost", False))
+            targets = photo_data.pop("crosspost_to", None)
+        photo_id = self.social_action_service.post_photo(photo_data)
+        if crosspost and self._federation_adapter is not None:
+            if isinstance(targets, list):
+                self._federation_adapter.mark_for_export(photo_id, targets)
+            else:
+                self._federation_adapter.mark_for_export(photo_id)
+        return photo_id
 
     def add_photo_emotion(self, photo_id: str, emotion: str) -> bool:
         return self.social_action_service.add_photo_emotion(photo_id, emotion)
@@ -333,7 +380,10 @@ class OrchestratorServer:
         return self._db.get_topic_name_from_id(topic_id)
 
     def get_user_photos(self, user_id: str, limit: int = 20, offset: int = 0) -> List[dict]:
-        return self.social_action_service.get_user_photos(user_id, limit=limit, offset=offset)
+        photos = self.social_action_service.get_user_photos(user_id, limit=limit, offset=offset)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            photos = self._federation_adapter.filter_photos(photos)
+        return photos
 
     def delete_photo(self, photo_id: str) -> bool:
         return self.social_action_service.delete_photo(photo_id)
@@ -359,19 +409,84 @@ class OrchestratorServer:
         return self.social_action_service.view_story(story_id, viewer_id)
 
     def get_recent_stories(self, user_id: str, limit: int = 50) -> List[dict]:
-        return self.social_action_service.get_recent_stories(user_id, limit)
+        stories = self.social_action_service.get_recent_stories(user_id, limit)
+        if self._federation_adapter is not None:  # accounts that are not active are invisible
+            stories = self._federation_adapter.filter_photos(stories)
+        return stories
 
     def get_home_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            # accounts that are not active are invisible: take more candidates, then cut
+            return self._federation_adapter.filter_photos(self._db.get_home_feed(user_id, limit=limit * 2))[:limit]
         return self._db.get_home_feed(user_id, limit=limit)
 
     def set_recommendation(self, user_id: str, photo_ids: List[str], round_id: str) -> str:
         return self._db.add_recommendation(user_id, photo_ids, round_id)
 
     def get_recommendation(self, user_id: str, round_id: str) -> Optional[List[str]]:
-        return self._db.get_recommendation(user_id, round_id)
+        ids = self._db.get_recommendation(user_id, round_id)
+        if ids and self._federation_adapter is not None:  # accounts that are not active are invisible
+            ids = self._federation_adapter.filter_photo_ids(ids)
+        return ids
 
     def get_follow_recommendations(self, user_id: str, limit: int = 5) -> List[str]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            found = self.follow_recsys.recommend_users_to_follow(user_id, limit * 2)
+            return self._federation_adapter.filter_users(found)[:limit]  # accounts that are not active are invisible
         return self.follow_recsys.recommend_users_to_follow(user_id, limit)
+
+    def get_federation_attention(self) -> Dict[str, float]:
+        """{local user id: attention multiplier of the day} (federation only; accounts not listed: 1)."""
+        if self._federation_adapter is None:
+            return {}
+        return self._federation_adapter.attention_multipliers()
+
+    def get_federation_provisioned(self) -> List[dict]:
+        """Accounts the federation created here for agents of other platforms and no client adopted yet (INV-19); each is
+        {user_id, username, interests, global_agent_id, user: the stored account}. [] standalone."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "provisioned_accounts"):
+            return []
+        return [{**a, "user": self._db.get_user(a["user_id"])} for a in adapter.provisioned_accounts()]
+
+    def mark_federation_adopted(self, user_ids: List[str]) -> None:
+        """A client gave an agent to each of these provisioned accounts."""
+        if self._federation_adapter is not None and hasattr(self._federation_adapter, "mark_adopted"):
+            self._federation_adapter.mark_adopted(user_ids)
+
+    def get_federation_destinations(self, user_id: str) -> List[str]:
+        """Members where this account's agent can cross-post now (federation, crosspost.mode = agent_action); [] otherwise."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_members"):
+            return []
+        return adapter.destination_members(user_id)
+
+    def get_federation_destination_info(self, user_id: str) -> List[dict]:
+        """P15: the destinations with their platform type and name ([{member, platform, name}]); several members may share a type."""
+        adapter = self._federation_adapter
+        if adapter is None or not hasattr(adapter, "destination_info"):
+            return []
+        return adapter.destination_info(user_id)
+
+    # -- human participation (H5c): used by the human gateway (YGateway) --------------------
+    def human_context(self) -> dict:
+        """Round in which a person's action is recorded, without moving the server's own round."""
+        rid = self.current_round_id or self._db.get_or_create_round(self._current_day, self._current_hour)
+        adapter = self._federation_adapter
+        return {"round_id": rid, "day": self._current_day, "hour": self._current_hour, "federated": adapter is not None,
+                "crosspost_mode": getattr(adapter, "crosspost_mode", None)}
+
+    def human_ensure(self, human_key: str, username: str = None, language: str = None) -> dict:
+        """Create (idempotent) the account of a person; with a federation it also registers the `human:` identity."""
+        from YPhotoSharing.YGateway.humans import ensure_human
+
+        return ensure_human(self._db, self._federation_adapter, self.human_context()["round_id"], human_key, username, language)
+
+    def get_federation_inactive_agents(self) -> List[str]:
+        """Local ids of the accounts that are not active on this platform (federation); [] standalone."""
+        if self._federation_adapter is None:
+            return []
+        return sorted(self._federation_adapter.inactive_agent_ids())
 
     def report_content(self, reporter_id: str, content_id: str, content_type: str, reason: str, round_id: str):
         return self.social_action_service.add_report(reporter_id, content_id, content_type, reason, round_id)
@@ -398,9 +513,13 @@ class OrchestratorServer:
         return self.social_action_service.get_dms(user_id, limit)
 
     def get_explore_feed(self, user_id: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            return self._federation_adapter.filter_photos(self._db.get_explore_feed(user_id, limit * 2))[:limit]
         return self._db.get_explore_feed(user_id, limit)
 
     def get_hashtag_feed(self, hashtag: str, limit: int = 30) -> List[dict]:
+        if self._federation_adapter is not None and self._federation_adapter.inactive_agent_ids():
+            return self._federation_adapter.filter_photos(self._db.get_hashtag_feed(hashtag, limit * 2))[:limit]
         return self._db.get_hashtag_feed(hashtag, limit)
 
     def save_media(self, content_base64: str, extension: str = "jpg") -> str:

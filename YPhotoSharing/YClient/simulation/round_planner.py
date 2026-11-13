@@ -3,6 +3,8 @@ from __future__ import annotations
 import random
 from typing import Iterable, List, Sequence
 
+from YPhotoSharing.YClient import federation as _federation
+
 
 class SimulationRoundPlanner:
     """Encapsulate client-side agent scheduling and action-weight shaping."""
@@ -52,8 +54,12 @@ class SimulationRoundPlanner:
         hourly_activity = self.simulation_config.get("hourly_activity", {})
 
         active_agents = []
+        excluded = getattr(self, "excluded_ids", ())  # accounts not active on this platform (federation)
         for agent in agents:
             user_data = getattr(agent, "user_data", {}) or {}
+            if excluded and str(user_data.get("id")) in excluded:
+                continue
+            attention = _federation.attention_multiplier(user_data.get("id"))  # federation attention (F4.3), 1.0 when off
             if user_data.get("is_churned") or user_data.get("left_on") is not None:
                 continue
             daily_activity_level = int(user_data.get("daily_activity_level", 1) or 1)
@@ -70,13 +76,13 @@ class SimulationRoundPlanner:
                         active_hours = [int(h) for h in profile_val]
                     else:
                         active_hours = [int(h) for h in str(profile_val).split(",")]
-                    if hour in active_hours:
+                    if hour in active_hours and not _federation.skipped_by_attention(user_data.get("id")):
                         active_agents.append(agent)
                 except ValueError:
                     continue
                 continue
 
-            probability = max(0.0, min(1.0, float(hourly_activity.get(str(hour), 0.04)) * activity_factor))
+            probability = max(0.0, min(1.0, float(hourly_activity.get(str(hour), 0.04)) * activity_factor * attention))
             if random.random() < probability:
                 active_agents.append(agent)
 

@@ -9,6 +9,7 @@ import random
 import uuid
 from typing import Optional
 
+from YPhotoSharing.YClient import federation as _federation
 from YPhotoSharing.common_utils import strip_wrapping_quotes
 
 from YPhotoSharing.YClient.actions.dynamics_helpers import (
@@ -29,6 +30,7 @@ async def share_photo(
     llm_service=None,
     agent_attrs: Optional[dict] = None,
     cluster_id: int = 0,
+    day: Optional[int] = None,
 ) -> Optional[dict]:
     """
     Share a recommended photo.
@@ -94,6 +96,8 @@ async def share_photo(
             "filter_name": parent_photo.get("filter_name"),
             "location_name": parent_photo.get("location_name"),
             "topic_ids": parent_topic_ids,
+            # F8: {} unless the federation is on in agent_action mode and the agent chose to share it elsewhere
+            **(await _federation.share_fields_async(server, user_id, caption, llm_service if (llm_service is not None and (agent_attrs or {}).get("llm", True)) else None, day=day, agent_attrs=agent_attrs, cluster_id=cluster_id, shared=parent_photo.get("caption"))),
         }
         
         new_photo_id = await server.post_photo.remote(photo_data)
