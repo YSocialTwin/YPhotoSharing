@@ -163,6 +163,12 @@ class PhotoSharing(PlatformProvider):
             return None
         return self.library("forms").agent_ext_values(agent, config)
 
+    def agent_payload_ext(self, agent_payload: Mapping[str, Any]) -> list:
+        return self.library("forms").payload_ext(agent_payload)
+
+    def default_avatar_url(self, user: Any) -> Optional[str]:
+        return self.library("forms").default_avatar_url(user)
+
     def agent_form_context(self) -> dict:
         forms = self.library("forms")
         return {

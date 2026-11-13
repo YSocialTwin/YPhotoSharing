@@ -1,5 +1,6 @@
 """The photo-sharing fields of the population and agent forms (optional "Platform-specific fields" sections)."""
 
+import hashlib
 import json
 import random
 
@@ -244,3 +245,33 @@ def agent_ext(form, admin_user) -> dict:
                 )
             ext[name] = value
     return ext
+
+
+def payload_ext(agent_payload):
+    """``(feature name, value)`` pairs the photo-sharing runtime reads from an agent of a population file."""
+    pairs = [
+        (name, agent_payload.get(name))
+        for name in ("bio", "is_private", "is_verified", "attention_budget")
+    ]
+    own = agent_payload.get("photo_sharing") or {}
+    if isinstance(own, dict):
+        pairs += [
+            (name, own.get(name))
+            for name in ("favorite_filters", "story_visibility", "creator_tier")
+        ]
+    return pairs
+
+
+def default_avatar_url(user):
+    """Stock picture of a photo-sharing user that has none (one of the numbered images, by id or a hash of the name)."""
+    user_key = str(
+        getattr(user, "id", "") or getattr(user, "username", "") or ""
+    ).strip()
+    if not user_key:
+        return ""
+    try:
+        image_id = str(int(user_key))
+    except (TypeError, ValueError):
+        hashed = int(hashlib.md5(user_key.encode("utf-8")).hexdigest(), 16)
+        image_id = str((hashed % 1000) + 1)
+    return f"/static/assets/img/users/{image_id}.png"
