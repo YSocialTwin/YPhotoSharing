@@ -1,0 +1,13 @@
+                                    {% if platform_form_available.photo_sharing %}
+                                    <div class="ys-opt-section" id="opt-photo-sharing">
+                                        <label class="ys-opt-head">
+                                            <input type="checkbox" name="include_photo_sharing" id="include_photo_sharing" value="1">
+                                            <span class="ys-plat-badge is-photo">{{ _('Photo Sharing') }}</span>
+                                            <span class="ys-opt-title">{{ _('Photo Sharing Configuration') }}</span>
+                                            <span class="ys-opt-tag">{{ _('Optional · Advanced') }}</span>
+                                        </label>
+                                        <div id="photo-sharing-config-wrapper" class="ys-opt-body d-none">
+                                            {% include "@photo_sharing/admin/_agent_photo_sharing.html" %}
+                                        </div>
+                                    </div>
+                                    {% endif %}

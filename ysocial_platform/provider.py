@@ -148,6 +148,31 @@ class PhotoSharing(PlatformProvider):
             payload["recsys_type"] = agents.cluster_id(payload.get("recsys_type"))
         agents.apply_agent_fields(payload, agent, ext_map)
 
+    def form_sections_available(self, admin_user: Any) -> bool:
+        return self.library("forms").available(admin_user)
+
+    def population_form_config(
+        self, form: Mapping[str, Any], username_type: str, admin_user: Any
+    ) -> Optional[dict]:
+        return self.library("forms").population_config(form, username_type, admin_user)
+
+    def population_agent_ext(
+        self, agent: Any, config: Optional[dict], population: Any
+    ) -> Optional[list]:
+        if config is None and getattr(population, "username_type", "") != self.key:
+            return None
+        return self.library("forms").agent_ext_values(agent, config)
+
+    def agent_form_context(self) -> dict:
+        forms = self.library("forms")
+        return {
+            "story_visibility_options": forms.STORY_VISIBILITY,
+            "creator_tier_options": forms.CREATOR_TIERS,
+        }
+
+    def agent_form_ext(self, form: Mapping[str, Any], admin_user: Any) -> dict:
+        return self.library("forms").agent_ext(form, admin_user)
+
     def ensure_database_schema(self, engine: Any, uri: Optional[str] = None) -> bool:
         """Create the complete YPhotoSharing schema (it has its own SQLAlchemy base, with ``user_mgmt``).
 
