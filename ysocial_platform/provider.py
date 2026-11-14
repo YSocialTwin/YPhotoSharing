@@ -35,6 +35,12 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+
+    @property
+    def human_gateway(self):
+        """How a person of a World Simulation gets an account here and acts (``gateway.py``)."""
+        return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
+
     federation_traits = FederationTraits(
         mdi_icon="mdi-image-multiple-outline",
         local_kind="photo",

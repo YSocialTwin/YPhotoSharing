@@ -32,7 +32,6 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
-
 from y_web.sdk import gettext as _
 from y_web.sdk.models import db
 from y_web.sdk.routes import blueprint
@@ -2016,7 +2015,6 @@ def _photo_announce_event(exp: Exps, event: str, payload: dict) -> None:
     """Tell installed plugins about a human action (never raises)."""
     try:
         from flask import current_app
-
         from y_web.sdk.runtime import dispatch_platform_event
 
         dispatch_platform_event(
@@ -2713,6 +2711,8 @@ def api_photo_share_post(exp_id, photo_id):
     # World Simulation (F8): an enrolled person who picked other platforms shares through the runtime gateway
     from y_web.sdk.federation import human_outbox as _ho
 
+    from .. import gateway as _gateway
+
     _requested = _ho.requested_members(request.values.getlist("crosspost"))
     if _requested and photo_key:
         _caption = str(request.values.get("caption") or "").strip()
@@ -2721,7 +2721,7 @@ def api_photo_share_post(exp_id, photo_id):
             current_user,
             _requested,
             _caption,
-            lambda t: _ho.photo_share(photo_key, _caption, t),
+            lambda t: _gateway.share(photo_key, _caption, t),
             only="photo_sharing",
         )
         if _sent is not None:
@@ -3138,6 +3138,8 @@ def api_photo_share(exp_id):
     # World Simulation (F8): an enrolled person who picked other platforms posts through the runtime gateway
     from y_web.sdk.federation import human_outbox as _ho
 
+    from .. import gateway as _gateway
+
     _requested = _ho.requested_members(request.form.getlist("crosspost"))
     if _requested:
         import base64 as _b64
@@ -3153,7 +3155,7 @@ def api_photo_share(exp_id):
             current_user,
             _requested,
             caption or alt_text,
-            lambda t: _ho.photo_post(
+            lambda t: _gateway.post(
                 caption or alt_text,
                 t,
                 image_base64=_b64.b64encode(_raw).decode("ascii"),
