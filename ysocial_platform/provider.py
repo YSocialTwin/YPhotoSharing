@@ -43,6 +43,7 @@ class PhotoSharing(PlatformProvider):
 
     server_label = "YPhotoSharing"
     runtime_keys = ("photo_sharing",)
+    tag_runtime_sets = (("photo_sharing",),)
     federation_traits = FederationTraits(
         mdi_icon="mdi-image-multiple-outline",
         local_kind="photo",
