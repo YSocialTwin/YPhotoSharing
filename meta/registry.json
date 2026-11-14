@@ -1,7 +1,7 @@
 {
   "platform": {
     "key": "photo_sharing",
-    "api_version": "1.0",
+    "api_version": "1.2",
     "provider": "ysocial_platform.provider:PhotoSharing"
   }
 }

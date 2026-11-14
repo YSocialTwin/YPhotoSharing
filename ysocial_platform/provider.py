@@ -21,6 +21,7 @@ from y_web.sdk import (
     HPC,
     N_,
     CreationRules,
+    FederationTraits,
     HpcClientForm,
     PlatformProvider,
     ServerConfigRequest,
@@ -34,6 +35,17 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+    federation_traits = FederationTraits(
+        mdi_icon="mdi-image-multiple-outline",
+        local_kind="photo",
+        author_sql="SELECT p.id, u.username, p.user_id FROM photos p LEFT JOIN user_mgmt u ON u.id = p.user_id WHERE p.id IN ({q})",
+        content_path="/{exp}/photo/profile/{author}/recent/1#feed-post-{id}",
+        profile_path="/{exp}/photo/profile/{account}/recent/1",
+        account_sql="SELECT id, username FROM user_mgmt WHERE id = ?",
+        text_limit=300,
+        decision_triggers=("publish", "interaction"),
+        simulators=(HPC,),
+    )
 
     library_package = f"{__package__}.photo"
     database_file_name = "yphotosharing.db"
