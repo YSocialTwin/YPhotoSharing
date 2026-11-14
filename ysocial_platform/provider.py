@@ -43,6 +43,17 @@ class PhotoSharing(PlatformProvider):
 
     server_label = "YPhotoSharing"
     runtime_keys = ("photo_sharing",)
+    hpc_launch = {
+        "runtime_repo": "YPhotoSharing",
+        "supports_gunicorn": False,
+        "frozen_server_runs_script": True,
+        "client_config_only": True,
+        "normalizes_client_config": True,
+        "prompts_filename": "prompts_ygram.json",
+        "orchestrator_actor": "orchestrator_server",
+        "client_actor_prefix": "Client_",
+        "supports_federation": True,
+    }
     tag_runtime_sets = (("photo_sharing",),)
     federation_traits = FederationTraits(
         mdi_icon="mdi-image-multiple-outline",
