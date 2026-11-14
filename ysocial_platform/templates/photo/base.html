@@ -1632,7 +1632,7 @@
 </div>
 
 {% if photo_include_chat_panel|default(True) %}
-{% include "microblogging/components/chat_panel.html" %}
+{% include "shared/chat_panel.html" %}
 {% endif %}
 
 <script src="{{ url_for('static', filename='assets/js/app.js') }}"></script>
