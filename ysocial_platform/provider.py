@@ -72,6 +72,25 @@ class PhotoSharing(PlatformProvider):
     participant_is_account = True
     admin_view_session_keys = ("photo_view_user_id", "photo_switch_user_id")
 
+    has_population_fields = True
+
+    def carries_population_fields(self, population):
+        from sqlalchemy import select
+        from y_web import db
+        from y_web.src.models import Agent_Ext, Agent_Population
+
+        return bool(
+            db.session.scalar(
+                select(Agent_Ext.agent_id)
+                .join(Agent_Population, Agent_Population.agent_id == Agent_Ext.agent_id)
+                .where(
+                    Agent_Population.population_id == population.id,
+                    Agent_Ext.feature_name == "creator_tier",
+                )
+                .limit(1)
+            )
+        )
+
     def attach_routes(self):
         importlib.import_module(f"{__package__}.routes")
 
