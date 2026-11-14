@@ -32,9 +32,11 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
+
 from y_web.sdk import gettext as _
 from y_web.sdk.models import db
 from y_web.sdk.routes import blueprint
+from y_web.sdk.web import choose_active_experiment
 
 main = blueprint("main")
 from y_web.sdk.models import Admin_users, Agent, Exps, Page, Rounds, User_mgmt
@@ -2014,6 +2016,7 @@ def _photo_announce_event(exp: Exps, event: str, payload: dict) -> None:
     """Tell installed plugins about a human action (never raises)."""
     try:
         from flask import current_app
+
         from y_web.sdk.runtime import dispatch_platform_event
 
         dispatch_platform_event(
@@ -2039,10 +2042,9 @@ def photo_feed_logged():
         flash(_("No active photo-sharing experiment. Please activate one first."))
         return redirect("/admin/experiments")
 
-    if len(exps) > 1:
+    exp = choose_active_experiment(exps)
+    if exp is None:
         return redirect("/admin/join_simulation")
-
-    exp = exps[0]
     return redirect(f"/{exp.idexp}/photo/feed/all/feed/rf/1")
 
 
