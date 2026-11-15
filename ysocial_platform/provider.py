@@ -37,6 +37,22 @@ class PhotoSharing(PlatformProvider):
     icon = "camera"
     order = 30
 
+    # the pages the participants share
+    reads_server_config = True
+
+    def profile_redirect(self, exp, user, page):
+        return f"/{exp.idexp}/photo/profile/{user.id}/recent/{page}"
+
+    def page_context(self, exp, ui):
+        annotations = bool(ui.get("annotations_enabled", True))
+        return {
+            "platform_ui": "photo",
+            "forum_show_emotions": annotations
+            and bool(ui.get("annotation_emotions", True)),
+            "forum_show_topics": annotations
+            and bool(ui.get("annotation_topics", True)),
+        }
+
     # what the admin "frontend settings" page offers for this platform (the box is in templates/slots/)
     frontend_settings = (
         FrontendSetting(
