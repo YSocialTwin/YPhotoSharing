@@ -1,0 +1,15 @@
+/* The "also on" block of a profile in the Photo sharing frontend (world simulation). */
+.ws-also--photo .ws-also-state {
+  display: inline-block; padding: 2px 7px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: .66rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+}
+.ws-also--photo { align-items: center; gap: 6px 16px; margin-top: 8px; }
+.ws-also--photo .ws-also-label { color: #666; font-size: .95rem; }
+.ws-also--photo .ws-also-chip { display: inline-flex; align-items: center; gap: 6px; color: #111; font-weight: 700; text-decoration: none; }
+.ws-also--photo a.ws-also-chip:hover { text-decoration: underline; }
+.ws-also--photo .ws-also-chip:focus-visible { outline: 2px solid #111; outline-offset: 3px; border-radius: 4px; }
+.ws-also--photo .ws-also-handle { font-weight: 400; color: #666; }
+.ws-also--photo .ws-also-chip.is-dormant, .ws-also--photo .ws-also-chip.is-left, .ws-also--photo .ws-also-chip.is-inactive { color: #666; font-weight: 600; }
+.ws-also--photo .ws-also-chip.is-nolink { cursor: default; }
+@media (max-width: 760px) {
+  .ws-also--photo { justify-content: center; }
+}

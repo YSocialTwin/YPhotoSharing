@@ -1,0 +1,3 @@
+/* Admin pages of the Photo sharing platform: its badge and the chip on the agent page. */
+.ys-plat-badge.is-photo { color: #7c3aed; background: rgba(124, 58, 237, .10); }
+.ys-ad-chip-photo { background: #e0f2fe; color: #075985; font-size: .7rem; vertical-align: middle; }

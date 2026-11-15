@@ -34,6 +34,7 @@ from y_web.sdk import services
 
 class PhotoSharing(PlatformProvider):
     key = "photo_sharing"
+    admin_css = ("css/photo-admin.css",)
     #: texts of the plugin catalogue / repository metadata that the core translation catalogue carries
     catalog_texts = (
         N_(
