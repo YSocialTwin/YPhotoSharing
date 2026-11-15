@@ -18,6 +18,7 @@ from typing import Any, List, Mapping, Optional, Tuple
 
 from y_web.sdk import (
     COMMON_FRONTEND_CAPABILITIES,
+    FieldGroup,
     HPC,
     N_,
     CreationRules,
@@ -36,6 +37,23 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+    field_groups = (
+        FieldGroup(
+            "photo_sharing",
+            N_("Photo Sharing"),
+            "photo",
+            extension_fields={
+                "creator_tier": N_("Creator tier"),
+                "story_visibility": N_("Story visibility"),
+                "is_private": N_("Private account"),
+                "is_verified": N_("Verified account"),
+                "attention_budget": N_("Attention budget"),
+                "favorite_filters": N_("Favourite filters"),
+                "bio": N_("Has a biography"),
+            },
+            weight=20,
+        ),
+    )
 
     uuid_follow_ids = True  # the ids of its follow rows are UUIDs in every runtime
 
