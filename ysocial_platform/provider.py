@@ -37,6 +37,8 @@ class PhotoSharing(PlatformProvider):
     icon = "camera"
     order = 30
 
+    uuid_follow_ids = True  # the ids of its follow rows are UUIDs in every runtime
+
     # the pages the participants share
     reads_server_config = True
 
