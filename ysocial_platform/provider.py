@@ -41,6 +41,11 @@ class PhotoSharing(PlatformProvider):
         """How a person of a World Simulation gets an account here and acts (``gateway.py``)."""
         return importlib.import_module(f"{__package__}.gateway").HUMAN_GATEWAY
 
+    @property
+    def human_recsys(self):
+        """The recommender systems of the people who use the frontend (``recsys/``)."""
+        return importlib.import_module(f"{__package__}.recsys").RECSYS
+
     server_label = "YPhotoSharing"
     runtime_keys = ("photo_sharing",)
     hpc_launch = {
@@ -76,6 +81,7 @@ class PhotoSharing(PlatformProvider):
 
     def carries_population_fields(self, population):
         from sqlalchemy import select
+
         from y_web import db
         from y_web.src.models import Agent_Ext, Agent_Population
 

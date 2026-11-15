@@ -32,10 +32,13 @@ from flask import (
 from flask_login import current_user, login_required
 from sqlalchemy import select
 from werkzeug.utils import secure_filename
+
 from y_web.sdk import gettext as _
 from y_web.sdk.models import db
 from y_web.sdk.routes import blueprint
 from y_web.sdk.web import choose_active_experiment
+
+from ..recsys import RECSYS, get_suggested_users
 
 main = blueprint("main")
 from y_web.sdk.models import Admin_users, Agent, Exps, Page, Rounds, User_mgmt
@@ -46,7 +49,6 @@ from y_web.sdk.social import (
     get_avatars_dir,
     get_experiment_engine_uri,
     get_safe_profile_pic,
-    get_suggested_users,
     get_unanswered_mentions,
     is_admin,
     open_experiment_session,
@@ -2015,6 +2017,7 @@ def _photo_announce_event(exp: Exps, event: str, payload: dict) -> None:
     """Tell installed plugins about a human action (never raises)."""
     try:
         from flask import current_app
+
         from y_web.sdk.runtime import dispatch_platform_event
 
         dispatch_platform_event(
@@ -3542,7 +3545,9 @@ def photo_feed(exp_id, user_id="all", timeline="timeline", mode="rf", page=1):
         suggested_contacts=suggested_contacts,
         followed_contact_ids=followed_contact_ids,
         recsys_info=_content_recsys_info(
-            getattr(logged_user, "recsys_type", None), _load_ui_settings(exp_id)
+            getattr(logged_user, "recsys_type", None),
+            _load_ui_settings(exp_id),
+            recsys=RECSYS,
         ),
         experiment_memory_enabled=_experiment_memory_enabled(exp_id),
         **_photo_sidebar_context(
