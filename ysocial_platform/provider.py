@@ -37,6 +37,25 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+    experiment_free_paths = ("/photo/feed",)
+
+    def _feed_url(self, exp_id):
+        from flask import url_for
+
+        return url_for(
+            "main.photo_feed",
+            exp_id=exp_id,
+            user_id="all",
+            timeline="feed",
+            mode="rf",
+            page=1,
+            tab="for_you",
+        )
+
+    def after_follow_url(self, exp_id, referrer):
+        if "/photo/suggestions" in referrer or not referrer:
+            return self._feed_url(exp_id)
+        return None
     field_groups = (
         FieldGroup(
             "photo_sharing",
