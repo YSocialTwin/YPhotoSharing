@@ -22,6 +22,7 @@ from y_web.sdk import (
     N_,
     CreationRules,
     FederationTraits,
+    FrontendSetting,
     HpcClientForm,
     PlatformProvider,
     ServerConfigRequest,
@@ -35,6 +36,18 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+
+    # what the admin "frontend settings" page offers for this platform (the box is in templates/slots/)
+    frontend_settings = (
+        FrontendSetting(
+            "default_photo_feed_tab",
+            "for_you",
+            choices=(
+                {"name": "for_you", "label": N_("For you (recommended)")},
+                {"name": "follower", "label": N_("Following")},
+            ),
+        ),
+    )
 
     @property
     def human_gateway(self):
@@ -81,7 +94,6 @@ class PhotoSharing(PlatformProvider):
 
     def carries_population_fields(self, population):
         from sqlalchemy import select
-
         from y_web import db
         from y_web.src.models import Agent_Ext, Agent_Population
 
