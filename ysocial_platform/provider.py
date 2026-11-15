@@ -36,7 +36,9 @@ class PhotoSharing(PlatformProvider):
     key = "photo_sharing"
     #: texts of the plugin catalogue / repository metadata that the core translation catalogue carries
     catalog_texts = (
-        N_("Simulation runtime for photo-sharing experiments, with an Instagram-like platform."),
+        N_(
+            "Simulation runtime for photo-sharing experiments, with an Instagram-like platform."
+        ),
     )
     label = N_("Photo sharing")
     icon = "camera"
@@ -53,6 +55,53 @@ class PhotoSharing(PlatformProvider):
         "#67e8f9",
     )
     frontend_annotations_hint = N_("Choose which labels are displayed on photos.")
+    content_schema = {
+        "requires": ("photos",),
+        "signals": ("photo_topics", "photo_hashtags", "photo_emotions"),
+        "content_table": "photos",
+        "topic_table": "photo_topics",
+        "hashtag_table": "photo_hashtags",
+        "emotion_table": "photo_emotions",
+        "content_id_column": "photo_id",
+        "reaction_id_column": "photo_id",
+        "recommendation_ids_column": "photo_ids",
+        "text_column": "caption",
+        "summary_expression": "COALESCE(NULLIF(TRIM({p}caption), ''), NULLIF(TRIM({p}alt_text), ''), NULLIF(TRIM({p}image_url), ''))",
+        "reported_content_type": "photo",
+        "wording": {
+            "annotated": N_("Annotated Photos"),
+            "polarity": N_("Current polarity breakdown across annotated photos."),
+            "polarity_by_day": N_(
+                "Positive, neutral, and negative photo counts by day."
+            ),
+            "polarized": N_("Most Polarized Photos"),
+            "emotions": N_("Current distribution of annotated photos."),
+            "volume": N_(
+                "Total emotion tags versus distinct annotated photos per day."
+            ),
+        },
+    }
+
+    # Tables this platform adds to the standard experiment database (the core creates them with its own).
+    experiment_tables = {
+        "sqlite": {
+            "photos": "\n        CREATE TABLE IF NOT EXISTS photos (\n            id TEXT PRIMARY KEY,\n            user_id TEXT NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            round TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            image_url TEXT NOT NULL,\n            thumbnail_url TEXT,\n            caption TEXT,\n            alt_text TEXT,\n            filter_name TEXT,\n            location_name TEXT,\n            latitude REAL,\n            longitude REAL,\n            is_carousel INTEGER DEFAULT 0,\n            carousel_index INTEGER DEFAULT 0,\n            parent_photo_id TEXT REFERENCES photos(id) ON DELETE SET NULL,\n            num_likes INTEGER DEFAULT 0,\n            num_comments INTEGER DEFAULT 0,\n            num_shares INTEGER DEFAULT 0,\n            is_sponsored INTEGER DEFAULT 0,\n            embedding TEXT,\n            aesthetic_score REAL,\n            viral_score REAL DEFAULT 0.0,\n            sentiment_score REAL,\n            media_url TEXT,\n            is_removed INTEGER DEFAULT 0,\n            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n            deleted_at DATETIME\n        )\n    ",
+            "stories": "\n        CREATE TABLE IF NOT EXISTS stories (\n            id TEXT PRIMARY KEY,\n            user_id TEXT NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            round TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            media_url TEXT NOT NULL,\n            media_type TEXT DEFAULT 'carousel',\n            duration_seconds INTEGER DEFAULT 5,\n            sticker_type TEXT,\n            sticker_data TEXT,\n            caption TEXT,\n            title TEXT NOT NULL,\n            description TEXT NOT NULL,\n            image_urls TEXT NOT NULL DEFAULT '[]',\n            view_count INTEGER DEFAULT 0,\n            expires_at DATETIME,\n            created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n        )\n    ",
+            "saved_photos": "\n        CREATE TABLE IF NOT EXISTS saved_photos (\n            id TEXT PRIMARY KEY,\n            user_id TEXT NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            photo_id TEXT NOT NULL REFERENCES photos(id) ON DELETE CASCADE,\n            round TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n        )\n    ",
+            "story_views": "\n        CREATE TABLE IF NOT EXISTS story_views (\n            id TEXT PRIMARY KEY,\n            story_id TEXT NOT NULL REFERENCES stories(id) ON DELETE CASCADE,\n            viewer_id TEXT NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            round TEXT NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            viewed_at DATETIME DEFAULT CURRENT_TIMESTAMP\n        )\n    ",
+        },
+        "postgresql": {
+            "saved_photos": "\n        CREATE TABLE IF NOT EXISTS saved_photos (\n            id VARCHAR(36) PRIMARY KEY,\n            user_id VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            photo_id VARCHAR(36) NOT NULL REFERENCES photos(id) ON DELETE CASCADE,\n            round VARCHAR(36) NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n        )\n    ",
+            "story_views": "\n        CREATE TABLE IF NOT EXISTS story_views (\n            id VARCHAR(36) PRIMARY KEY,\n            story_id VARCHAR(36) NOT NULL REFERENCES stories(id) ON DELETE CASCADE,\n            viewer_id VARCHAR(36) NOT NULL REFERENCES user_mgmt(id) ON DELETE CASCADE,\n            round VARCHAR(36) NOT NULL REFERENCES rounds(id) ON DELETE CASCADE,\n            viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n        )\n    ",
+        },
+    }
+    experiment_columns = {
+        "sqlite": {"saved_photos": {"round": "TEXT"}, "story_views": {"round": "TEXT"}},
+        "postgresql": {
+            "saved_photos": {"round": "VARCHAR(36)"},
+            "story_views": {"round": "VARCHAR(36)"},
+        },
+    }
     frontend_labels = {
         "interaction_post": (N_("New photo"), N_("Share a new photo")),
         "interaction_like": (N_("Like"), N_("Heart reaction on photos")),
@@ -100,6 +149,7 @@ class PhotoSharing(PlatformProvider):
         if "/photo/suggestions" in referrer or not referrer:
             return self._feed_url(exp_id)
         return None
+
     field_groups = (
         FieldGroup(
             "photo_sharing",
