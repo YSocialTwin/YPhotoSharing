@@ -34,6 +34,10 @@ from y_web.sdk import services
 
 class PhotoSharing(PlatformProvider):
     key = "photo_sharing"
+    #: texts of the plugin catalogue / repository metadata that the core translation catalogue carries
+    catalog_texts = (
+        N_("Simulation runtime for photo-sharing experiments, with an Instagram-like platform."),
+    )
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
