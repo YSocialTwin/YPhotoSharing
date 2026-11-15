@@ -1466,98 +1466,98 @@
             color: #666;
         }
 
-        body.photo-base-body .microblog-chat-collapse-handle {
+        body.photo-base-body .ys-chat-collapse-handle {
             border-color: rgba(255, 47, 85, 0.18);
             background: linear-gradient(180deg, #ffffff 0%, #fff6f7 100%);
             color: #ff2f55;
         }
 
-        body.photo-base-body .microblog-chat-collapse-badge {
+        body.photo-base-body .ys-chat-collapse-badge {
             background: linear-gradient(135deg, #ff7a00 0%, #ff2f55 100%);
             box-shadow: 0 8px 18px rgba(255, 47, 85, 0.28);
         }
 
-        body.photo-base-body .microblog-chat-card {
+        body.photo-base-body .ys-chat-card {
             background: rgba(255, 255, 255, 0.98);
             border-color: rgba(255, 47, 85, 0.08);
             box-shadow: 0 18px 42px rgba(15, 23, 42, 0.10), 0 0 0 1px rgba(255, 122, 0, 0.02);
         }
 
-        body.photo-base-body .microblog-chat-icon-btn {
+        body.photo-base-body .ys-chat-icon-btn {
             border-color: rgba(255, 47, 85, 0.12);
             color: #444;
             background: #fff;
         }
 
-        body.photo-base-body .microblog-chat-icon-btn:hover {
+        body.photo-base-body .ys-chat-icon-btn:hover {
             border-color: rgba(255, 47, 85, 0.24);
             box-shadow: 0 10px 20px rgba(255, 47, 85, 0.08);
         }
 
-        body.photo-base-body .microblog-chat-search-input {
+        body.photo-base-body .ys-chat-search-input {
             border-color: rgba(255, 47, 85, 0.12);
             background: #faf7f7;
         }
 
-        body.photo-base-body .microblog-chat-list-item:hover {
+        body.photo-base-body .ys-chat-list-item:hover {
             background: rgba(255, 47, 85, 0.05);
         }
 
-        body.photo-base-body .microblog-chat-list-avatar,
-        body.photo-base-body .microblog-chat-thread-avatar {
+        body.photo-base-body .ys-chat-list-avatar,
+        body.photo-base-body .ys-chat-thread-avatar {
             background: linear-gradient(135deg, #f9ce34 0%, #ee2a7b 48%, #6228d7 100%);
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.82);
         }
 
-        body.photo-base-body .microblog-chat-avatar-fallback {
+        body.photo-base-body .ys-chat-avatar-fallback {
             color: #ff2f55;
         }
 
-        body.photo-base-body .microblog-chat-list-preview,
-        body.photo-base-body .microblog-chat-list-date,
-        body.photo-base-body .microblog-chat-subtitle,
-        body.photo-base-body .microblog-chat-thread-subtitle {
+        body.photo-base-body .ys-chat-list-preview,
+        body.photo-base-body .ys-chat-list-date,
+        body.photo-base-body .ys-chat-subtitle,
+        body.photo-base-body .ys-chat-thread-subtitle {
             color: #7a7a7a;
         }
 
-        body.photo-base-body .microblog-chat-messages {
+        body.photo-base-body .ys-chat-messages {
             background:
                 radial-gradient(circle at top right, rgba(255, 47, 85, 0.06), transparent 42%),
                 radial-gradient(circle at top left, rgba(255, 122, 0, 0.05), transparent 34%),
                 linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 252, 252, 0.98));
         }
 
-        body.photo-base-body .microblog-chat-bubble.is-assistant {
+        body.photo-base-body .ys-chat-bubble.is-assistant {
             background: #fff;
             border-color: rgba(0, 0, 0, 0.07);
             color: #111;
         }
 
-        body.photo-base-body .microblog-chat-bubble.is-user {
+        body.photo-base-body .ys-chat-bubble.is-user {
             background: linear-gradient(135deg, #ff7a00 0%, #ff2f55 100%);
         }
 
-        body.photo-base-body .microblog-chat-compose {
+        body.photo-base-body .ys-chat-compose {
             border-top-color: rgba(0, 0, 0, 0.08);
             background: #fff;
         }
 
-        body.photo-base-body .microblog-chat-input {
+        body.photo-base-body .ys-chat-input {
             border-color: rgba(255, 47, 85, 0.14);
             background: #faf7f7;
         }
 
-        body.photo-base-body .microblog-chat-input:focus {
+        body.photo-base-body .ys-chat-input:focus {
             border-color: #ff2f55;
             box-shadow: 0 0 0 0.08rem rgba(255, 47, 85, 0.15);
         }
 
-        body.photo-base-body .microblog-chat-send-btn {
+        body.photo-base-body .ys-chat-send-btn {
             background: linear-gradient(135deg, #ff7a00 0%, #ff2f55 100%);
             box-shadow: 0 10px 20px rgba(255, 47, 85, 0.16);
         }
 
-        body.photo-base-body .microblog-chat-empty {
+        body.photo-base-body .ys-chat-empty {
             color: #7a7a7a;
         }
 
@@ -1614,7 +1614,7 @@
         }
 
         {% block photo_extra_head %}{% endblock %}
-        {% include 'shared/platform_ui_gating.html' %}
+        {% set ui_gating_rules = '@photo_sharing/shared/_ui_gating_rules.html' %}{% include 'shared/platform_ui_gating.html' %}
     </style>
     <script src="{{ url_for('static', filename='assets/js/i18n.js') }}" data-domains="simulation" defer></script>
 </head>
@@ -1659,7 +1659,7 @@
 <script src="{{ url_for('static', filename='assets/js/autocompletes.js') }}"></script>
 <script src="{{ url_for('static', filename='assets/js/async_updates.js') }}"></script>
 {% if photo_include_chat_panel|default(True) %}
-<script src="{{ url_for('static', filename='assets/js/microblog-chat.js') }}"></script>
+<script src="{{ url_for('static', filename='assets/js/ys-chat.js') }}"></script>
 {% endif %}
 {% block photo_extra_scripts %}{% endblock %}
 
@@ -1858,7 +1858,7 @@
                                 </div>
                                 <div class="photo-share-overlay__field">
                                     <label for="photo-share-caption">{{ _('Text') }}</label>
-                                    <textarea id="photo-share-caption" data-photo-share-caption placeholder="{{ _('Write the post text...') }}"></textarea>
+                                    <textarea id="photo-share-caption" data-ws-source data-photo-share-caption placeholder="{{ _('Write the post text...') }}"></textarea>
                                 </div>
                                 {% set ws_exp = exp_id %}{% include 'shared/world_simulation_crosspost.html' %}
                                 <div class="photo-share-overlay__helper">

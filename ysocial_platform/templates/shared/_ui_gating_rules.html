@@ -1,0 +1,6 @@
+{# selectors this frontend hides when a switch of /admin/frontend_settings is off #}
+  {% if not ui.interaction_like %}{% set _ = rules.append('[data-photo-post-like]') %}{% endif %}
+  {% if not ui.interaction_comment %}{% set _ = rules.append('.photo-overlay__composer, [data-photo-comment-reply]') %}{% endif %}
+  {% if not ui.interaction_share %}{% set _ = rules.append('[data-photo-post-share]') %}{% endif %}
+  {% if not ui.interaction_post %}{% set _ = rules.append('[data-photo-open-share]') %}{% endif %}
+  {% if not ui.show_post_time %}{% set _ = rules.append('[data-photo-post-time], .photo-feed-card__author-copy small') %}{% endif %}

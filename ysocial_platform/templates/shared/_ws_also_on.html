@@ -1,0 +1,5 @@
+{# layout of the World Simulation "Also on" list in this frontend #}
+<div class="photo-profile-links ws-also ws-also--photo" data-ws-profile-badges role="group" aria-label="{{ _('Also on') }}">
+  <span class="ws-also-label">{{ _('Also on') }}</span>
+  {% for b in ws_badges %}{{ ws_chip(b, 'ws-also-chip') }}{% endfor %}
+</div>

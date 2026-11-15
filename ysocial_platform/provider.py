@@ -41,6 +41,46 @@ class PhotoSharing(PlatformProvider):
     label = N_("Photo sharing")
     icon = "camera"
     order = 30
+    badge_text = N_("Photo Sharing")
+    badge_palette = (
+        "#0ea5e9",
+        "#38bdf8",
+        "#7dd3fc",
+        "#0284c7",
+        "#0369a1",
+        "#bae6fd",
+        "#075985",
+        "#67e8f9",
+    )
+    frontend_annotations_hint = N_("Choose which labels are displayed on photos.")
+    frontend_labels = {
+        "interaction_post": (N_("New photo"), N_("Share a new photo")),
+        "interaction_like": (N_("Like"), N_("Heart reaction on photos")),
+        "interaction_comment": (
+            N_("Comment"),
+            N_("Comment on photos and reply to comments"),
+        ),
+        "interaction_share": (N_("Send / share"), N_("Send a photo to others")),
+        "annotation_agent_type": (
+            N_("Agent type"),
+            N_("Badge identifying ad-hoc agents next to the author name"),
+        ),
+        "show_suggested_friends": (
+            N_("Suggestions"),
+            N_('Show the "Suggestions for you" box beside the feed'),
+        ),
+        "show_recsys_info": (
+            N_("Recommender info"),
+            N_("Show the content recommender system box beside the feed"),
+        ),
+        "show_annotation_stats": (
+            N_("Annotation statistics"),
+            N_("Show the live annotation statistics box beside the feed"),
+        ),
+    }
+    menu_label = N_("Photo Sharing (e.g., Instagram)")
+    badge = "photo"
+    hpc_redis = True
     experiment_free_paths = ("/photo/feed",)
 
     def _feed_url(self, exp_id):
