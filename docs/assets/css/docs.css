@@ -875,3 +875,85 @@ h2.ys-pk { margin: 1.8rem 0 .4rem; font-size: 1.5rem; } h2.ys-pk small { margin-
 .ys-bub.a { align-self: flex-start; border-bottom-left-radius: 4px; }
 .ys-bub.b { align-self: flex-end; border-bottom-right-radius: 4px; background: linear-gradient(135deg, var(--teal), var(--violet)); color: #fff; border-color: transparent; }
 .ys-bub.b small { color: rgba(255,255,255,.8); } .ys-bub.dim { opacity: .55; }
+
+/* ==========================================================================
+   Refresh (header as y-not.social, cards, single-row steps, tab menu, next strip).
+   Palette-agnostic: only uses the variables of the platform.
+   ========================================================================== */
+body { margin: 0; }
+
+/* header: same geometry as the YSocial site (flat, full width, brand left, menu right) */
+.ys-nav { margin: 0; border-radius: 0; background: color-mix(in srgb, var(--nav-bg-solid) 66%, transparent); border-bottom: 1px solid var(--line); backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%); box-shadow: none; }
+.ys-nav.is-scrolled { background: color-mix(in srgb, var(--nav-bg-solid) 94%, transparent); box-shadow: 0 10px 30px rgba(0, 0, 0, .12); }
+.ys-nav-inner { max-width: 1280px; height: 64px; padding: 0 20px; gap: 18px; }
+.ys-brand { gap: 10px; font-size: 1.05rem; font-weight: 800; letter-spacing: .02em; }
+.ys-brand img { width: 34px; height: 34px; border-radius: 9px; }
+.ys-nav .ys-menu { flex: 0 1 auto; justify-content: flex-start; margin: 0 0 0 auto; gap: 4px; }
+.ys-nav .ys-link, .ys-nav .ys-drop-btn { padding: 9px 13px; border-radius: 11px; font-size: .93rem; font-weight: 600; }
+.ys-nav .ys-link:hover, .ys-nav .ys-drop-btn:hover, .ys-nav .ys-drop.open > .ys-drop-btn { background: var(--card-hi); color: var(--heading) !important; }
+.ys-nav .ys-link.active, .ys-nav .ys-drop.has-active > .ys-drop-btn { color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: none; }
+.ys-nav .ys-drop-btn::after { width: 7px; height: 7px; border-width: 0 2px 2px 0; margin-left: 0; }
+.ys-nav .ys-actions { margin-left: 6px; gap: 6px; }
+.ys-nav .ys-iconbtn { width: 38px; height: 38px; min-width: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--card); }
+.ys-nav .ys-iconbtn:hover { background: var(--card-hi); transform: translateY(-1px); }
+.ys-nav .ys-langbtn { width: auto; padding: 0 11px; border-radius: 11px; }
+.ys-nav .ys-cta { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 11px; font-weight: 700; font-size: .9rem; color: #fff !important; text-decoration: none !important; white-space: nowrap;
+  background: linear-gradient(135deg, var(--accent), var(--blob-c)); box-shadow: 0 8px 20px color-mix(in srgb, var(--accent) 28%, transparent); transition: transform .15s; }
+.ys-nav .ys-cta:hover { transform: translateY(-1px); color: #fff !important; }
+@media (min-width: 1061px) {
+  .ys-nav .ys-panel { left: auto; right: 0; top: calc(100% + 10px); min-width: 230px; padding: 8px; border-radius: 16px; transform: translateY(-6px); background: var(--nav-bg-solid); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .ys-nav .ys-drop.open > .ys-panel { transform: none; }
+  .ys-nav .ys-panel a { padding: 10px 14px; border-radius: 10px; font-weight: 500; }
+  .ys-nav .ys-panel a:hover, .ys-nav .ys-panel a.active { background: var(--card-hi); }
+}
+@media (max-width: 1060px) { .ys-nav-inner { height: 58px; } .ys-nav .ys-cta { display: none; } .ys-nav .ys-menu { top: 58px; margin: 0; } }
+
+/* "What you can study": cards */
+.ys-article .ys-grid { clear: both; counter-reset: ysc; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); margin: 1.4rem 0 2rem; }
+.ys-article .ys-grid > .ys-card { counter-increment: ysc; position: relative; display: flex; flex-direction: column; overflow: hidden; padding: 24px 22px 20px !important;
+  background: var(--card) !important; border: 1px solid var(--line) !important; border-radius: 18px !important; box-shadow: none !important; transition: transform .18s, border-color .18s, box-shadow .18s; }
+.ys-article .ys-grid > .ys-card::before { content: counter(ysc, decimal-leading-zero); position: absolute; right: 18px; top: 10px; font-size: 2.6rem; font-weight: 800; line-height: 1; letter-spacing: -.03em;
+  color: color-mix(in srgb, var(--accent) 16%, transparent); pointer-events: none; }
+.ys-article .ys-grid > .ys-card::after { content: ""; position: absolute; left: 0; top: 0; width: 100%; height: 3px; background: linear-gradient(90deg, var(--accent), var(--blob-c)); opacity: .85; }
+.ys-article .ys-grid > .ys-card:hover { transform: translateY(-4px) !important; border-color: color-mix(in srgb, var(--accent) 55%, transparent) !important; box-shadow: var(--shadow) !important; background: var(--card) !important; }
+.ys-article .ys-grid > .ys-card h3 { margin: 4px 36px 8px 0; font-size: 1.15rem; }
+.ys-article .ys-grid > .ys-card p { flex: 1 1 auto; margin: 0; color: var(--muted); font-size: .94rem; line-height: 1.55; max-width: none; }
+.ys-card-go { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.ys-card-go a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 11%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent); font-size: .85rem; font-weight: 700; text-decoration: none !important; transition: background .15s, border-color .15s, gap .15s; }
+.ys-card-go a::after { content: "\2192"; transition: transform .15s; }
+.ys-card-go a:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); border-color: var(--accent); color: var(--accent); }
+.ys-card-go a:hover::after { transform: translateX(3px); }
+
+/* "Where to go next" (home): always one row */
+.ys-article .ys-steps { display: grid; grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: minmax(168px, 1fr); gap: 14px; margin: 1.2rem 0 1.6rem; padding: 22px 2px 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.ys-article .ys-steps > li { scroll-snap-align: start; padding: 24px 16px 16px; display: flex; flex-direction: column; min-width: 0; }
+.ys-article .ys-steps > li::before { left: 16px; top: -17px; }
+.ys-article .ys-steps h3 { margin: 0 0 6px; font-size: 1rem; line-height: 1.25; }
+.ys-article .ys-steps p { flex: 1 1 auto; font-size: .88rem; line-height: 1.45; }
+.ys-article .ys-steps small { margin-top: 10px; font-size: .78rem; line-height: 1.4; }
+
+/* tabs: underline menu with numbered items */
+.ys-tabbar { position: sticky; top: 64px; z-index: 30; display: flex; align-items: stretch; gap: 2px; margin: 10px 0 20px; padding: 0 2px; overflow-x: auto; scrollbar-width: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  background: color-mix(in srgb, var(--bg1) 88%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.ys-tabbar button { position: relative; flex: none; display: inline-flex; align-items: center; gap: 9px; padding: 14px 14px 13px; border: 0; border-radius: 10px 10px 0 0; background: none; box-shadow: none; color: var(--muted); font: inherit; font-size: .93rem; font-weight: 650; white-space: nowrap; cursor: pointer; transition: color .15s, background .15s; }
+.ys-tabbar button i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--chip); color: var(--muted); font-style: normal; font-size: .72rem; font-weight: 800; transition: background .15s, color .15s; }
+.ys-tabbar button::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: linear-gradient(90deg, var(--accent), var(--blob-c)); transform: scaleX(0); transform-origin: 50% 100%; transition: transform .22s ease; }
+.ys-tabbar button:hover { color: var(--heading); background: color-mix(in srgb, var(--accent) 7%, transparent); border: 0; }
+.ys-tabbar button:hover::after { transform: scaleX(.35); }
+.ys-tabbar button[aria-selected="true"] { color: var(--heading); background: none; border: 0; box-shadow: none; }
+.ys-tabbar button[aria-selected="true"] i { background: linear-gradient(135deg, var(--accent), var(--blob-c)); color: #fff; }
+.ys-tabbar button[aria-selected="true"]::after { transform: scaleX(1); }
+.ys-pane > h2:not(:first-child) { margin-top: 2.2rem; padding-top: 1.6rem; border-top: 1px solid var(--line) !important; }
+
+/* "where to next": a quiet strip of links after the content */
+.ys-next { clear: both; margin: 2.4rem 0 .6rem; padding: 18px 20px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.ys-next h2 { margin: 0 0 10px !important; padding: 0 !important; border: 0 !important; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase !important; color: var(--muted) !important; font-weight: 800; }
+.ys-next h2 .ys-anchor { display: none; }
+.ys-next ul { display: flex; flex-wrap: wrap; gap: 8px 10px; margin: 0; padding: 0; list-style: none; }
+.ys-next li { margin: 0; max-width: none !important; }
+.ys-next li a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); color: var(--text); font-size: .9rem; font-weight: 600; text-decoration: none; transition: border-color .15s, background .15s; }
+.ys-next li a::after { content: "\2192"; color: var(--accent); }
+.ys-next li a:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--heading); }
+.ys-next p { margin: 0; max-width: none; }
+/* end of refresh */
