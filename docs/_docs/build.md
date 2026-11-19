@@ -20,7 +20,7 @@ time: "15 minutes"
 python -m pytest -q
 ```
 
-The suite covers the repository layer, annotations, recommendations, stress and reward, logging, schema parity, the gateway and the federation bindings; it does not replace a long multi-client soak test against a real Ray cluster and a real model.
+The suite covers the repository layer, annotations, recommendations, stress and reward, logging, schema parity, the gateway and the platform bindings; it does not replace a long multi-client soak test against a real Ray cluster and a real model.
 
 ## This site
 

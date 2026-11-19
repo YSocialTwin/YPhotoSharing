@@ -255,41 +255,6 @@
    ]
   },
   {
-   "id": "federation",
-   "title": "Federation",
-   "title_it": "Federazione",
-   "fields": [
-    {
-     "path": "federation.enabled",
-     "kind": "bool",
-     "default": false,
-     "min": null,
-     "xmin": null,
-     "max": null,
-     "choices": null,
-     "basic": false,
-     "label": "federation.enabled",
-     "label_it": "federation.enabled",
-     "help": "Join a multi-platform simulation (a coordinator keeps a shared clock). Off by default; nothing changes without it.",
-     "help_it": "Partecipa a una simulazione multi-piattaforma (un coordinatore tiene un orologio condiviso). Spenta per impostazione predefinita; senza di essa nulla cambia."
-    },
-    {
-     "path": "federation.crosspost_mode",
-     "kind": "str",
-     "default": null,
-     "min": null,
-     "xmin": null,
-     "max": null,
-     "choices": null,
-     "basic": false,
-     "label": "federation.crosspost_mode",
-     "label_it": "federation.crosspost_mode",
-     "help": "How cross-posts are chosen when the federation is on (for example agent_action: the agent decides).",
-     "help_it": "Come si scelgono i cross-post quando la federazione è attiva (per esempio agent_action: decide l'agente)."
-    }
-   ]
-  },
-  {
    "id": "human",
    "title": "Human participants",
    "title_it": "Partecipanti umani",

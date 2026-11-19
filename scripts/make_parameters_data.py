@@ -46,10 +46,6 @@ SERVER = [
         ("logging.enable_actor_log", "bool", True, False, "Write the structured actor log.", "Scrive il log strutturato degli attori."),
         ("logging.enable_request_log", "bool", True, False, "Write the request trace _server.log.", "Scrive la traccia delle richieste _server.log."),
     ]),
-    ("federation", "Federation", "Federazione", [
-        ("federation.enabled", "bool", False, False, "Join a multi-platform simulation (a coordinator keeps a shared clock). Off by default; nothing changes without it.", "Partecipa a una simulazione multi-piattaforma (un coordinatore tiene un orologio condiviso). Spenta per impostazione predefinita; senza di essa nulla cambia."),
-        ("federation.crosspost_mode", "str", None, False, "How cross-posts are chosen when the federation is on (for example agent_action: the agent decides).", "Come si scelgono i cross-post quando la federazione è attiva (per esempio agent_action: decide l'agente)."),
-    ]),
     ("human", "Human participants", "Partecipanti umani", [
         ("human.gateway.host", "str", "127.0.0.1", False, "Address where run_gateway.py listens (loopback).", "Indirizzo su cui ascolta run_gateway.py (loopback)."),
         ("human.gateway.port", "int", 0, False, "Port of the gateway; 0 picks a free one and writes it to human_gateway.json.", "Porta del gateway; 0 ne sceglie una libera e la scrive in human_gateway.json.", {"min": 0}),

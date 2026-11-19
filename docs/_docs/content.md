@@ -11,6 +11,8 @@ A `post_photo` action chooses a **topic** from the agent's interests (or from th
 
 {% include shot.html file="post" caption="A post as the platform pages show it: the generated photo, the caption and the reactions." %}
 
+{% include shot.html file="create" caption="The create-post dialog: a photo and a description are shared with the experiment." %}
+
 ## Images
 
 | Setting | Effect |

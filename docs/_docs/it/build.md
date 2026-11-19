@@ -20,7 +20,7 @@ time: "15 minuti"
 python -m pytest -q
 ```
 
-La suite copre il livello dei repository, le annotazioni, i recommender, stress e ricompensa, il logging, la parità dello schema, il gateway e i collegamenti di federazione; non sostituisce una lunga prova di carico multi-client su un vero cluster Ray con un vero modello.
+La suite copre il livello dei repository, le annotazioni, i recommender, stress e ricompensa, il logging, la parità dello schema, il gateway e i collegamenti della piattaforma; non sostituisce una lunga prova di carico multi-client su un vero cluster Ray con un vero modello.
 
 ## Questo sito
 
