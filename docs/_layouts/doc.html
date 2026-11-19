@@ -1,0 +1,42 @@
+---
+layout: default
+---
+{%- include lang.html -%}
+{%- assign flat = "" | split: "" -%}
+{%- for g in nav -%}{%- for p in g.pages -%}{%- assign flat = flat | push: p -%}{%- endfor -%}{%- endfor -%}
+{%- assign pos = -1 -%}
+{%- for p in flat -%}{%- if p.id == here -%}{%- assign pos = forloop.index0 -%}{%- endif -%}{%- endfor -%}
+<section class="ys-pagehead" aria-label="Page header">
+  {%- assign eyebrow = page.eyebrow -%}{%- for g in nav -%}{%- for p in g.pages -%}{%- if p.id == here -%}{%- assign eyebrow = g.group -%}{%- endif -%}{%- endfor -%}{%- endfor -%}
+  {%- if eyebrow -%}<span class="ys-eyebrow">{{ eyebrow }}{% if pos >= 0 %} &middot; {{ pos | plus: 1 }}/{{ flat.size }}{% endif %}</span>{%- endif -%}
+  <h1>{{ page.title }}</h1>
+  {%- if page.subtitle -%}<p class="ys-sub">{{ page.subtitle }}</p>{%- endif -%}
+</section>
+<div class="ys-docs">
+  <main class="ys-doc-main">
+    <article id="maincontent" class="ys-article{% if page.tabs == false %} ys-notabs{% endif %}" data-on-this-page="{{ ui.on_this_page }}">
+      {%- if page.goal -%}
+      <div class="ys-tldr">
+        <h2 class="ys-tldr-title">{{ ui.in_short }}</h2>
+        <ul>
+          <li><strong>{{ ui.goal }}.</strong> {{ page.goal }}</li>
+          {%- if page.needs -%}<li><strong>{{ ui.you_need }}.</strong> {{ page.needs }}</li>{%- endif -%}
+          {%- if page.time -%}<li><strong>{{ ui.time }}.</strong> {{ page.time }}</li>{%- endif -%}
+        </ul>
+      </div>
+      {%- endif -%}
+      {{ content }}
+      <nav class="ys-pn" aria-label="{{ ui.prev }} / {{ ui.next }}">
+        {%- if pos > 0 -%}{%- assign prev_i = pos | minus: 1 -%}{%- assign prev = flat[prev_i] -%}
+        <a class="ys-card hover ys-pn-prev" href="{{ pre }}/{% if prev.id != 'index' %}{{ prev.id }}/{% endif %}"><small>&larr; {{ ui.prev }}</small><span class="ys-ct">{{ prev.title }}</span></a>
+        {%- else -%}<span></span>{%- endif -%}
+        {%- assign nxt_i = pos | plus: 1 -%}
+        {%- if pos >= 0 and nxt_i < flat.size -%}{%- assign nxt = flat[nxt_i] -%}
+        <a class="ys-card hover ys-pn-next" href="{{ pre }}/{{ nxt.id }}/"><small>{{ ui.next }} &rarr;</small><span class="ys-ct">{{ nxt.title }}</span></a>
+        {%- endif -%}
+      </nav>
+      <p class="ys-edit"><a href="{{ site.repo_url }}/edit/main/docs/_docs/{% if lang == 'it' %}it/{% endif %}{{ here }}.md" target="_blank" rel="noopener">{{ ui.edit }}</a></p>
+    </article>
+  </main>
+  <aside class="ys-doc-toc" id="ys-doc-toc" aria-label="{{ ui.on_this_page }}"></aside>
+</div>

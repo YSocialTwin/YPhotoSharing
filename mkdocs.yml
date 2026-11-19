@@ -11,6 +11,18 @@ theme:
     primary: deep purple
     accent: deep purple
 
+# the Jekyll site of docs/ (GitHub Pages) is not part of this build
+exclude_docs: |
+  /_config.yml
+  /_data/
+  /_docs/
+  /_includes/
+  /_layouts/
+  /assets/
+  /Gemfile
+  /Gemfile.lock
+  /_site/
+
 nav:
   - Home: index.md
   - Getting Started: getting_started.md

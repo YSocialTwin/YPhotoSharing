@@ -1,0 +1,63 @@
+# Texts of the interface of the site, per language.
+en:
+  lang_name: English
+  other_name: Italiano
+  other_code: it
+  menu: Documentation menu
+  skip: Skip to content
+  in_short: In short
+  goal: Goal
+  you_need: You need
+  time: Time
+  prev: Previous
+  next: Next
+  edit: Edit this page on GitHub
+  on_this_page: On this page
+  top: Back to top
+  cta: Get the code
+  nav_open: Open menu
+  theme: Switch between dark and light theme
+  footer_tag: The photo-sharing platform of YSocial, the open-source digital twin of online social media.
+  f_learn: Learn
+  f_run: Run it
+  f_ref: Reference
+  f_community: Community
+  repo: This repository
+  site_src: site source
+  built: Built with
+  lab: Interactive
+  lab_hint: Move the controls; everything is computed in your browser.
+  figure: Screenshot of the platform
+  figure_note: The pages shown come from a short simulated run with demo data.
+  home_alt: Home
+it:
+  lang_name: Italiano
+  other_name: English
+  other_code: en
+  menu: Menu della documentazione
+  skip: Vai al contenuto
+  in_short: In breve
+  goal: Obiettivo
+  you_need: Ti serve
+  time: Tempo
+  prev: Precedente
+  next: Successiva
+  edit: Modifica questa pagina su GitHub
+  on_this_page: In questa pagina
+  top: Torna su
+  cta: Scarica il codice
+  nav_open: Apri il menu
+  theme: Passa dal tema chiaro a quello scuro
+  footer_tag: La piattaforma di condivisione di foto di YSocial, il gemello digitale open source dei social media.
+  f_learn: Capire
+  f_run: Usarla
+  f_ref: Riferimento
+  f_community: Comunità
+  repo: Questo repository
+  site_src: sorgente del sito
+  built: Realizzato con
+  lab: Interattivo
+  lab_hint: Muovi i controlli; tutto è calcolato nel tuo browser.
+  figure: Schermata della piattaforma
+  figure_note: Le pagine mostrate vengono da una breve simulazione con dati dimostrativi.
+  home_alt: Home

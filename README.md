@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://github.com/YSocialTwin/YSocial"><b>YSocial</b></a> &nbsp;·&nbsp;
   <a href="https://y-not.social/plugins">Plugins</a> &nbsp;·&nbsp;
-  <a href="#documentation">Documentation</a> &nbsp;·&nbsp;
+  <a href="https://ysocialtwin.github.io/YPhotoSharing/">Documentation</a> &nbsp;·&nbsp;
   <a href="https://y-not.social/">Website</a>
 </p>
 
@@ -165,7 +165,9 @@ Configure your experiment: navigate to the `example/` directory. Modify `server_
 
 ## Documentation
 
-For deeper technical references, architecture overviews and preset experimental configurations, see the MkDocs site (`mkdocs serve`, then open `http://127.0.0.1:8000`).
+A guided, bilingual (English and Italian) site with interactive explanations, the parameter reference and the database schema is published at **<https://ysocialtwin.github.io/YPhotoSharing/>** (sources in `docs/`, built by the *Documentation* workflow).
+
+For deeper technical references, architecture overviews and preset experimental configurations, see the MkDocs pages (`mkdocs serve`, then open `http://127.0.0.1:8000`).
 
 - Alignment analysis and phased implementation plan: [`docs/ysimulator_alignment.md`](docs/ysimulator_alignment.md).
 - Logging details and configuration switches: [`docs/logging.md`](docs/logging.md).

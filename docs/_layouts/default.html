@@ -1,0 +1,36 @@
+{%- include lang.html -%}
+{%- assign other_url = opre | append: '/' -%}{%- if here != 'index' -%}{%- assign other_url = other_url | append: here | append: '/' -%}{%- endif -%}
+{%- assign self_url = pre | append: '/' -%}{%- if here != 'index' -%}{%- assign self_url = self_url | append: here | append: '/' -%}{%- endif -%}
+<!DOCTYPE html>
+<html lang="{{ lang }}" data-theme="light" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title and here != 'index' %}{{ page.title }} · {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.subtitle | default: site.description | strip_newlines | escape }}">
+  <meta name="theme-color" content="#f2f7fb">
+  <link rel="alternate" hreflang="{{ lang }}" href="{{ site.url }}{{ self_url }}">
+  <link rel="alternate" hreflang="{{ ui.other_code }}" href="{{ site.url }}{{ other_url }}">
+  <script>
+  /* apply the saved theme before first paint (default: light, like the YSocial site) */
+  (function(){try{var t=localStorage.getItem('ys-theme');if(t!=='light'&&t!=='dark'){t='light';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();
+  </script>
+  <link rel="stylesheet" href="{{ site.baseurl }}/assets/css/docs.css?v={{ site.time | date: '%s' }}">
+  <script src="{{ site.baseurl }}/assets/js/docs.js?v={{ site.time | date: '%s' }}" defer></script>
+  <script src="{{ site.baseurl }}/assets/js/schema.js?v={{ site.time | date: '%s' }}" defer></script>
+  <script src="{{ site.baseurl }}/assets/js/parameters.js?v={{ site.time | date: '%s' }}" defer></script>
+  <script src="{{ site.baseurl }}/assets/js/explainers.js?v={{ site.time | date: '%s' }}" defer></script>
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ site.baseurl }}/assets/favicon/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ site.baseurl }}/assets/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ site.baseurl }}/assets/favicon/favicon-16x16.png">
+  <link rel="shortcut icon" href="{{ site.baseurl }}/assets/favicon/favicon.ico">
+  <meta property="og:title" content="{{ page.title | default: site.title }}">
+  <meta property="og:description" content="{{ page.subtitle | default: site.description | strip_newlines | escape }}">
+  <meta property="og:image" content="{{ site.url }}{{ site.baseurl }}/assets/images/og-default.png">
+</head>
+<body>
+{% include navbar.html %}
+{{ content }}
+{% include footer.html %}
+</body>
+</html>

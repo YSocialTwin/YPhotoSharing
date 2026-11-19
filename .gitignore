@@ -225,3 +225,6 @@ example/media/
 example/exports/
 logs/
 .playwright-cli
+docs/_site/
+docs/.jekyll-cache/
+docs/.sass-cache/

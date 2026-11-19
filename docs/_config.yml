@@ -1,0 +1,69 @@
+# YPhotoSharing documentation. Built by GitHub Actions (.github/workflows/pages.yml) and served by GitHub Pages.
+title: "YPhotoSharing"
+subtitle: "An Instagram-style photo-sharing simulator for YSocial"
+description: >-
+  YPhotoSharing is the photo-sharing platform of YSocial: simulated creators and followers who post photos and stories,
+  follow, comment, react, share and report, with home and explore feeds, moderation, opinions and stress. This site explains
+  how it works, how to configure it and what the settings do. In English and Italian.
+
+url: "https://ysocialtwin.github.io"
+baseurl: "/YPhotoSharing"
+
+ysocial_version: "4.0.0"
+platform_api: "1.3"
+
+repo_url: "https://github.com/YSocialTwin/YPhotoSharing"
+ysocial_url: "https://y-not.social"
+ysocial_repo: "https://github.com/YSocialTwin/YSocial"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+  hard_wrap: false
+highlighter: rouge
+
+collections:
+  docs:
+    output: true
+    permalink: /:path/
+
+defaults:
+  - scope:
+      path: ""
+      type: docs
+    values:
+      layout: doc
+      lang: en
+  - scope:
+      path: "_docs/it"
+      type: docs
+    values:
+      layout: doc
+      lang: it
+
+plugins: []
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
+  - banner.png
+  - Service_description.md
+  - annotations.md
+  - architecture.md
+  - configuration.md
+  - current_parity_status.md
+  - experiments.md
+  - getting_started.md
+  - human-gateway.md
+  - index.md
+  - logging.md
+  - platform_requirements.md
+  - recommendations.md
+  - remaining_gaps.md
+  - ysimulator_alignment.md
+  - vendor/
+  - node_modules/
+  - .sass-cache/
+  - .jekyll-cache/

@@ -1,0 +1,32 @@
+{%- include lang.html -%}
+<footer class="ys-footer">
+  <div class="ys-footer-grid">
+    <div>
+      <a class="ys-flogo" href="{{ pre }}/"><img src="{{ site.baseurl }}/assets/images/yps-logo.png" alt="" width="34" height="34"> YPhotoSharing</a>
+      <p>{{ ui.footer_tag }} <a href="{{ site.ysocial_url }}" target="_blank" rel="noopener">YSocial</a>.</p>
+    </div>
+    <div>
+      <p class="ys-fh">{{ ui.f_learn }}</p>
+      <a href="{{ pre }}/how-it-works/">{{ nav[0].pages[1].title }}</a>
+      <a href="{{ pre }}/matching/">{{ nav[2].pages[0].title }}</a>
+      <a href="{{ pre }}/recommenders/">{{ nav[3].pages[0].title }}</a>
+    </div>
+    <div>
+      <p class="ys-fh">{{ ui.f_run }}</p>
+      <a href="{{ pre }}/configuration/">{{ nav[4].pages[0].title }}</a>
+      <a href="{{ pre }}/running/">{{ nav[4].pages[1].title }}</a>
+      <a href="{{ pre }}/parameters/">{{ nav[5].pages[0].title }}</a>
+    </div>
+    <div>
+      <p class="ys-fh">{{ ui.f_community }}</p>
+      <a href="{{ site.repo_url }}" target="_blank" rel="noopener">{{ ui.repo }}</a>
+      <a href="{{ site.ysocial_repo }}" target="_blank" rel="noopener">YSocial</a>
+      <a href="{{ site.ysocial_url }}" target="_blank" rel="noopener">YSocial website</a>
+    </div>
+  </div>
+  <div class="ys-footer-bottom">
+    <span>&copy; {{ site.time | date: '%Y' }} YSocial</span>
+    <span>{{ ui.built }} <a href="https://jekyllrb.com/" target="_blank" rel="noopener">Jekyll</a> &middot; <a href="{{ site.repo_url }}/tree/main/docs" target="_blank" rel="noopener">{{ ui.site_src }}</a></span>
+  </div>
+</footer>
+<button id="ys-top" type="button" aria-label="{{ ui.top }}" title="{{ ui.top }}">&uarr;</button>

@@ -1,0 +1,6 @@
+{%- comment -%} Sets lang, ui, nav, pre (prefix of the language), opre (prefix of the other language), here (id of the page). {%- endcomment -%}
+{%- assign lang = page.lang | default: 'en' -%}
+{%- assign ui = site.data.ui[lang] -%}
+{%- assign nav = site.data.nav[lang] -%}
+{%- if lang == 'it' -%}{%- assign pre = site.baseurl | append: '/it' -%}{%- assign opre = site.baseurl -%}{%- else -%}{%- assign pre = site.baseurl -%}{%- assign opre = site.baseurl | append: '/it' -%}{%- endif -%}
+{%- assign here = page.slug | default: 'index' -%}

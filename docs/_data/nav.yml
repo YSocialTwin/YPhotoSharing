@@ -1,0 +1,61 @@
+# Sidebar and menu, per language. `id` is the file name in _docs/ (and _docs/it/) without extension; the order is the reading order.
+en:
+  - group: "Intro"
+    pages:
+      - {id: index, title: What is YPhotoSharing}
+      - {id: how-it-works, title: How it works}
+  - group: "The world"
+    pages:
+      - {id: agents, title: Agents and population}
+      - {id: content, title: Photos, stories and media}
+      - {id: actions, title: What agents do}
+      - {id: network, title: Follow graph and privacy}
+  - group: "Dynamics"
+    pages:
+      - {id: feeds, title: Home and Explore feeds}
+      - {id: moderation, title: Reports and moderation}
+      - {id: opinions, title: Opinion dynamics}
+      - {id: stress, title: Stress and reward}
+      - {id: lifecycle, title: Churn and new users}
+  - group: "Run it"
+    pages:
+      - {id: configuration, title: Configuration}
+      - {id: running, title: Running an experiment}
+      - {id: participate, title: People on the platform}
+      - {id: analysis, title: Logs, annotations and export}
+  - group: "Reference"
+    pages:
+      - {id: parameters, title: Parameters}
+      - {id: database-schema, title: Database schema}
+      - {id: glossary, title: Glossary}
+      - {id: build, title: Build on it}
+it:
+  - group: "Intro"
+    pages:
+      - {id: index, title: Che cos'è YPhotoSharing}
+      - {id: how-it-works, title: Come funziona}
+  - group: "Il mondo"
+    pages:
+      - {id: agents, title: Agenti e popolazione}
+      - {id: content, title: Foto, storie e media}
+      - {id: actions, title: Che cosa fanno gli agenti}
+      - {id: network, title: Grafo dei follow e privacy}
+  - group: "Dinamiche"
+    pages:
+      - {id: feeds, title: Feed principale ed Explore}
+      - {id: moderation, title: Segnalazioni e moderazione}
+      - {id: opinions, title: Dinamica delle opinioni}
+      - {id: stress, title: Stress e ricompensa}
+      - {id: lifecycle, title: Abbandono e nuovi utenti}
+  - group: "Usala"
+    pages:
+      - {id: configuration, title: Configurazione}
+      - {id: running, title: Eseguire un esperimento}
+      - {id: participate, title: Persone sulla piattaforma}
+      - {id: analysis, title: Log, annotazioni ed export}
+  - group: "Riferimento"
+    pages:
+      - {id: parameters, title: Parametri}
+      - {id: database-schema, title: Schema del database}
+      - {id: glossary, title: Glossario}
+      - {id: build, title: Estendila}

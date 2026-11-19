@@ -1,0 +1,2990 @@
+{
+ "schema_version": null,
+ "groups": [
+  {
+   "id": "run",
+   "title": "The run and its clock",
+   "title_it": "La run e il suo orologio",
+   "tables": [
+    "rounds",
+    "analytics_snapshots"
+   ]
+  },
+  {
+   "id": "people",
+   "title": "Accounts and the follow graph",
+   "title_it": "Account e grafo dei follow",
+   "tables": [
+    "user_mgmt",
+    "follow",
+    "follow_requests"
+   ]
+  },
+  {
+   "id": "content",
+   "title": "Photos, stories and comments",
+   "title_it": "Foto, storie e commenti",
+   "tables": [
+    "photos",
+    "stories",
+    "story_views",
+    "comments",
+    "saved_photos",
+    "mentions",
+    "messages",
+    "direct_messages"
+   ]
+  },
+  {
+   "id": "reactions",
+   "title": "Reactions",
+   "title_it": "Reazioni",
+   "tables": [
+    "reactions",
+    "emotions"
+   ]
+  },
+  {
+   "id": "feeds",
+   "title": "Feeds, hashtags and trends",
+   "title_it": "Feed, hashtag e tendenze",
+   "tables": [
+    "recommendations",
+    "hashtags",
+    "photo_hashtags",
+    "trending_hashtags",
+    "photo_topics",
+    "interests",
+    "user_interest"
+   ]
+  },
+  {
+   "id": "annotations",
+   "title": "Annotations",
+   "title_it": "Annotazioni",
+   "tables": [
+    "photo_emotions",
+    "post_emotions",
+    "post_sentiment",
+    "post_toxicity"
+   ]
+  },
+  {
+   "id": "moderation",
+   "title": "Moderation",
+   "title_it": "Moderazione",
+   "tables": [
+    "reported",
+    "moderation_events"
+   ]
+  },
+  {
+   "id": "opinions",
+   "title": "Opinions",
+   "title_it": "Opinioni",
+   "tables": [
+    "user_opinions",
+    "opinion_paths"
+   ]
+  },
+  {
+   "id": "behaviour",
+   "title": "Stress and reward",
+   "title_it": "Stress e ricompensa",
+   "tables": [
+    "stress_reward"
+   ]
+  },
+  {
+   "id": "memory",
+   "title": "Agent memory",
+   "title_it": "Memoria degli agenti",
+   "tables": [
+    "memory_interaction_events",
+    "memory_social_cards"
+   ]
+  }
+ ],
+ "docs": {
+  "how-it-works": {
+   "en": "How it works",
+   "it": "Come funziona"
+  },
+  "agents": {
+   "en": "Agents and population",
+   "it": "Agenti e popolazione"
+  },
+  "content": {
+   "en": "Photos, stories and comments",
+   "it": "Foto, storie e commenti"
+  },
+  "actions": {
+   "en": "What agents do",
+   "it": "Che cosa fanno gli agenti"
+  },
+  "network": {
+   "en": "The follow graph",
+   "it": "Il grafo dei follow"
+  },
+  "feeds": {
+   "en": "Feeds, hashtags and trends",
+   "it": "Feed, hashtag e tendenze"
+  },
+  "moderation": {
+   "en": "Moderation",
+   "it": "Moderazione"
+  },
+  "opinions": {
+   "en": "Opinion dynamics",
+   "it": "Dinamica delle opinioni"
+  },
+  "stress": {
+   "en": "Stress, reward and satisfaction",
+   "it": "Stress, ricompensa e soddisfazione"
+  },
+  "analysis": {
+   "en": "Export and analysis",
+   "it": "Export e analisi"
+  }
+ },
+ "tables": {
+  "analytics_snapshots": {
+   "note": "Hourly totals (active users, photos, reactions, comments, follows) written at the end of each round.",
+   "doc": "analysis",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "active_users",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Accounts active in the round."
+    },
+    {
+     "name": "total_photos",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Photos in the run so far."
+    },
+    {
+     "name": "total_reactions",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Reactions so far."
+    },
+    {
+     "name": "total_comments",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Comments so far."
+    },
+    {
+     "name": "total_follows",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Follows so far."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "comments": {
+   "note": "Comments and replies to photos, with sentiment, likes and soft-delete flags.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "parent_comment_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "comments.id",
+     "desc": "Comment it answers."
+    },
+    {
+     "name": "body",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Text."
+    },
+    {
+     "name": "sentiment_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Sentiment score of the text."
+    },
+    {
+     "name": "num_likes",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Likes."
+    },
+    {
+     "name": "is_deleted",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 if deleted by the author."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    },
+    {
+     "name": "timestamp",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": "now()",
+     "fk": null,
+     "desc": "Timestamp."
+    },
+    {
+     "name": "is_removed",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 if removed by the moderation."
+    }
+   ],
+   "rules": []
+  },
+  "direct_messages": {
+   "note": "Private messages between two accounts, optionally attaching a photo.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "sender_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that sends."
+    },
+    {
+     "name": "recipient_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that receives."
+    },
+    {
+     "name": "body",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Text."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Attached photo."
+    },
+    {
+     "name": "is_read",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 once read."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "emotions": {
+   "note": "Catalogue of the emotions that can be attached to reactions and photos.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "emotion",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    },
+    {
+     "name": "icon",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Icon."
+    }
+   ],
+   "rules": []
+  },
+  "follow": {
+   "note": "Every follow and unfollow as an event: one row per pair, with the action and the round of the last change.",
+   "doc": "network",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that is followed."
+    },
+    {
+     "name": "follower_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that follows."
+    },
+    {
+     "name": "action",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "follow or unfollow (the last action of the pair)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "follow_requests": {
+   "note": "Requests to follow a private account, with their status.",
+   "doc": "network",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "follower_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that follows (user_mgmt.id)."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Private account asked."
+    },
+    {
+     "name": "status",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": true,
+     "default": "pending",
+     "fk": null,
+     "desc": "pending, accepted or rejected."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "hashtags": {
+   "note": "Distinct hashtags of the run.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "hashtag",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "The hashtag."
+    }
+   ],
+   "rules": []
+  },
+  "interests": {
+   "note": "Catalogue of interests.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "iid",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "interest",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Name."
+    }
+   ],
+   "rules": []
+  },
+  "memory_interaction_events": {
+   "note": "Interactions recorded for the agent memory (only with memory on).",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run it belongs to."
+    },
+    {
+     "name": "round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "actor_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Who acted."
+    },
+    {
+     "name": "target_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Who was addressed."
+    },
+    {
+     "name": "target_photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Photo addressed."
+    },
+    {
+     "name": "actor_photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Photo of the actor."
+    },
+    {
+     "name": "event_type",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of interaction."
+    },
+    {
+     "name": "relation_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Relationship label."
+    },
+    {
+     "name": "tone_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Tone."
+    },
+    {
+     "name": "topics_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Topics (JSON)."
+    },
+    {
+     "name": "salient_claim",
+     "type": "VARCHAR(300)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Main claim."
+    },
+    {
+     "name": "event_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Text of the event."
+    },
+    {
+     "name": "weight",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "1.0",
+     "fk": null,
+     "desc": "Weight."
+    },
+    {
+     "name": "importance",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Importance."
+    },
+    {
+     "name": "last_accessed_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last recall."
+    },
+    {
+     "name": "access_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Recalls."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "memory_social_cards": {
+   "note": "Social cards of the agent memory: affinity, conflict, humour and trust towards another account (only with memory on).",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "INTEGER",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "run_id",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Run it belongs to."
+    },
+    {
+     "name": "agent_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Owner of the card."
+    },
+    {
+     "name": "other_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Other person."
+    },
+    {
+     "name": "affinity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Affinity."
+    },
+    {
+     "name": "conflict",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Conflict."
+    },
+    {
+     "name": "humor",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Humour."
+    },
+    {
+     "name": "trust",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Trust."
+    },
+    {
+     "name": "last_relation_label",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last label."
+    },
+    {
+     "name": "last_round_id",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last round."
+    },
+    {
+     "name": "last_updated_round",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round of the update."
+    },
+    {
+     "name": "event_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Events summarised."
+    },
+    {
+     "name": "summary_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Summary."
+    },
+    {
+     "name": "evidence_tail_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Recent evidence (JSON)."
+    }
+   ],
+   "rules": [
+    "unique uq_memory_social_card: (run_id, agent_user_id, other_user_id)"
+   ]
+  },
+  "mentions": {
+   "note": "Accounts mentioned in a photo caption or comment.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "comment_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "comments.id",
+     "desc": "Comment containing the mention."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account mentioned."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "messages": {
+   "note": "Legacy message table (kept for compatibility).",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "sender_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that sends."
+    },
+    {
+     "name": "recipient_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that receives."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Attached photo."
+    },
+    {
+     "name": "content",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Text."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "moderation_events": {
+   "note": "Decisions of the moderation stub: the action taken, reason and confidence.",
+   "doc": "moderation",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "content_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Photo or comment concerned."
+    },
+    {
+     "name": "content_type",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "photo or comment."
+    },
+    {
+     "name": "action_taken",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Action decided."
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Reason given."
+    },
+    {
+     "name": "confidence",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "1.0",
+     "fk": null,
+     "desc": "Confidence of the decision."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "opinion_paths": {
+   "note": "Every change of opinion: from, to, direction, the post that caused it and the model.",
+   "doc": "opinions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic concerned."
+    },
+    {
+     "name": "topic",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Topic label."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "model_name",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Opinion model that wrote the row."
+    },
+    {
+     "name": "evaluation_scope",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Messages considered."
+    },
+    {
+     "name": "source_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Score before."
+    },
+    {
+     "name": "source_label",
+     "type": "VARCHAR(64)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Class before."
+    },
+    {
+     "name": "target_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Score after."
+    },
+    {
+     "name": "target_label",
+     "type": "VARCHAR(64)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Class after."
+    },
+    {
+     "name": "transition",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "From and to."
+    },
+    {
+     "name": "direction",
+     "type": "VARCHAR(16)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Direction of the change."
+    },
+    {
+     "name": "parent_post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Post that was answered."
+    },
+    {
+     "name": "actor_user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Account that wrote the message."
+    },
+    {
+     "name": "payload_json",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Details (JSON)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": [
+    "unique uq_opinion_path_transition: (user_id, topic, round_id, source_score, target_score, transition)"
+   ]
+  },
+  "photo_emotions": {
+   "note": "Dominant visual emotion of a photo (annotation), with score and viral score.",
+   "doc": "analysis",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "emotion_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "emotions.id",
+     "desc": "Emotion (emotions.id)."
+    },
+    {
+     "name": "score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Score of the emotion."
+    },
+    {
+     "name": "viral_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Viral score."
+    }
+   ],
+   "rules": []
+  },
+  "photo_hashtags": {
+   "note": "Links a photo to its hashtags.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "hashtag_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "hashtags.id",
+     "desc": "Hashtag (hashtags.id)."
+    }
+   ],
+   "rules": [
+    "unique uq_photo_hashtag: (photo_id, hashtag_id)"
+   ]
+  },
+  "photo_topics": {
+   "note": "Topics assigned to a photo, with the confidence of the assignment.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic concerned."
+    },
+    {
+     "name": "confidence",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "1.0",
+     "fk": null,
+     "desc": "Confidence of the assignment."
+    }
+   ],
+   "rules": [
+    "unique uq_photo_topic: (photo_id, topic_id)"
+   ]
+  },
+  "photos": {
+   "note": "Every published photo: author, caption, image, filter, location, counters, scores and the rounds of creation and removal.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Author."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "image_url",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Image of the photo."
+    },
+    {
+     "name": "thumbnail_url",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Thumbnail."
+    },
+    {
+     "name": "caption",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Caption."
+    },
+    {
+     "name": "alt_text",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Alternative text."
+    },
+    {
+     "name": "filter_name",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Filter applied."
+    },
+    {
+     "name": "location_name",
+     "type": "VARCHAR(200)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Place."
+    },
+    {
+     "name": "latitude",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Latitude."
+    },
+    {
+     "name": "longitude",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Longitude."
+    },
+    {
+     "name": "is_carousel",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 for a carousel."
+    },
+    {
+     "name": "carousel_index",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Position in the carousel."
+    },
+    {
+     "name": "parent_photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "First photo of the carousel."
+    },
+    {
+     "name": "num_likes",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Reactions counter."
+    },
+    {
+     "name": "num_comments",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Comments counter."
+    },
+    {
+     "name": "num_shares",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Shares counter."
+    },
+    {
+     "name": "is_sponsored",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 for a sponsored post."
+    },
+    {
+     "name": "embedding",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Embedding of the photo."
+    },
+    {
+     "name": "aesthetic_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Aesthetic score."
+    },
+    {
+     "name": "viral_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Score used for virality."
+    },
+    {
+     "name": "sentiment_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Sentiment score of the text."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    },
+    {
+     "name": "deleted_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When it was soft-deleted; empty while live."
+    },
+    {
+     "name": "is_removed",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 when the moderation removed it."
+    },
+    {
+     "name": "media_url",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Media URL."
+    }
+   ],
+   "rules": []
+  },
+  "post_emotions": {
+   "note": "Emotions attached to a post by the annotators.",
+   "doc": "analysis",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Post concerned."
+    },
+    {
+     "name": "emotion_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "emotions.id",
+     "desc": "Emotion (emotions.id)."
+    }
+   ],
+   "rules": []
+  },
+  "post_sentiment": {
+   "note": "Sentiment (negative, positive, neutral, compound) of posts, comments and reactions.",
+   "doc": "analysis",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Post concerned."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic concerned."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "neg",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Negative."
+    },
+    {
+     "name": "pos",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Positive."
+    },
+    {
+     "name": "neu",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Neutral."
+    },
+    {
+     "name": "compound",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Compound score."
+    },
+    {
+     "name": "sentiment_parent",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Sentiment of the parent."
+    },
+    {
+     "name": "is_post",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a post."
+    },
+    {
+     "name": "is_comment",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a comment."
+    },
+    {
+     "name": "is_reaction",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a reaction."
+    }
+   ],
+   "rules": []
+  },
+  "post_toxicity": {
+   "note": "Perspective API scores of a post or comment.",
+   "doc": "analysis",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "post_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Post concerned."
+    },
+    {
+     "name": "toxicity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Toxicity."
+    },
+    {
+     "name": "severe_toxicity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Severe toxicity."
+    },
+    {
+     "name": "identity_attack",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Identity attack."
+    },
+    {
+     "name": "insult",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Insult."
+    },
+    {
+     "name": "profanity",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Profanity."
+    },
+    {
+     "name": "threat",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Threat."
+    },
+    {
+     "name": "sexually_explicit",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Sexually explicit."
+    },
+    {
+     "name": "flirtation",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Flirtation."
+    }
+   ],
+   "rules": []
+  },
+  "reactions": {
+   "note": "The reaction of an account to a photo (like or an emotion), one row each.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "emotion_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "emotions.id",
+     "desc": "Emotion attached, if any."
+    },
+    {
+     "name": "reaction_type",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": true,
+     "default": "LIKE",
+     "fk": null,
+     "desc": "like or an emotion."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": [
+    "unique uq_reaction_user_photo: (user_id, photo_id)"
+   ]
+  },
+  "recommendations": {
+   "note": "The list of photos the recommender offered to an account in a round.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "photo_ids",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Photos offered, in order (JSON)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "reported": {
+   "note": "Reports filed by accounts against a photo or comment, with the reason.",
+   "doc": "moderation",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "reporter_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that reported."
+    },
+    {
+     "name": "content_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Photo or comment concerned."
+    },
+    {
+     "name": "content_type",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "photo or comment."
+    },
+    {
+     "name": "reason",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Reason given."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "rounds": {
+   "note": "The time axis: one row per round (one simulated hour), with day and hour; every `round` column points here.",
+   "doc": "how-it-works",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "day",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Simulated day."
+    },
+    {
+     "name": "hour",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Hour of the day (0-23)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": [
+    "unique uq_round_day_hour: (day, hour)"
+   ]
+  },
+  "saved_photos": {
+   "note": "Photos saved by an account.",
+   "doc": "actions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "photo_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "photos.id",
+     "desc": "Photo concerned (photos.id)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "stories": {
+   "note": "Stories (24 hours): media, sticker, caption, view counter and expiry.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "media_url",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Media."
+    },
+    {
+     "name": "media_type",
+     "type": "VARCHAR(20)",
+     "pk": false,
+     "null": true,
+     "default": "carousel",
+     "fk": null,
+     "desc": "image or video."
+    },
+    {
+     "name": "duration_seconds",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "5",
+     "fk": null,
+     "desc": "Length shown."
+    },
+    {
+     "name": "sticker_type",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of sticker."
+    },
+    {
+     "name": "sticker_data",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Sticker data (JSON)."
+    },
+    {
+     "name": "caption",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Caption."
+    },
+    {
+     "name": "title",
+     "type": "VARCHAR(120)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Title."
+    },
+    {
+     "name": "description",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Description."
+    },
+    {
+     "name": "image_urls",
+     "type": "TEXT",
+     "pk": false,
+     "null": false,
+     "default": "[]",
+     "fk": null,
+     "desc": "Images (JSON)."
+    },
+    {
+     "name": "view_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Views."
+    },
+    {
+     "name": "expires_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When it expires."
+    },
+    {
+     "name": "created_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When the row was written."
+    }
+   ],
+   "rules": []
+  },
+  "story_views": {
+   "note": "Who watched which story, and when.",
+   "doc": "content",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "story_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "stories.id",
+     "desc": "Story watched."
+    },
+    {
+     "name": "viewer_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account that watched."
+    },
+    {
+     "name": "round",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "viewed_at",
+     "type": "DATETIME",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "When."
+    }
+   ],
+   "rules": [
+    "unique uq_story_view: (story_id, viewer_id)"
+   ]
+  },
+  "stress_reward": {
+   "note": "Variations of stress and reward of each account, with the event that caused them and the round.",
+   "doc": "stress",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "uid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account (user_mgmt.id)."
+    },
+    {
+     "name": "variable",
+     "type": "VARCHAR(16)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "stress or reward."
+    },
+    {
+     "name": "value",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Variation."
+    },
+    {
+     "name": "type",
+     "type": "VARCHAR(16)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of event."
+    },
+    {
+     "name": "action",
+     "type": "VARCHAR(64)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Event that caused it."
+    },
+    {
+     "name": "tid",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round."
+    }
+   ],
+   "rules": [
+    "check ck_stress_reward_type: type IN ('aggregate', 'variation')",
+    "check ck_stress_reward_value: (type = 'aggregate' AND value >= 0 AND value <= 1) OR (type = 'variation' AND value >= -1 AND value <= 1)",
+    "check ck_stress_reward_variable: variable IN ('stress', 'reward')"
+   ]
+  },
+  "trending_hashtags": {
+   "note": "Ranking of hashtags per round, with the number of photos that used them.",
+   "doc": "feeds",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "hashtag_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "hashtags.id",
+     "desc": "Hashtag (hashtags.id)."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "photo_count",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "Photos that used it in the window."
+    },
+    {
+     "name": "rank",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Position in the ranking."
+    }
+   ],
+   "rules": [
+    "unique uq_trending_hashtag_round: (hashtag_id, round_id)"
+   ]
+  },
+  "user_interest": {
+   "note": "Interests of an account, with the round in which they were recorded.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "interest_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Interest (interests.iid)."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    }
+   ],
+   "rules": []
+  },
+  "user_mgmt": {
+   "note": "One row per account (agent, page or human): persona, Big Five, archetype, activity profile, profile data, influence and satisfaction scores, churn flag.",
+   "doc": "agents",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "username",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Unique name."
+    },
+    {
+     "name": "email",
+     "type": "VARCHAR(50)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Address of the account."
+    },
+    {
+     "name": "password",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Password of a human account (hashed)."
+    },
+    {
+     "name": "user_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Kind of model that drives the agent."
+    },
+    {
+     "name": "leaning",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Political leaning."
+    },
+    {
+     "name": "age",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Age."
+    },
+    {
+     "name": "oe",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: openness."
+    },
+    {
+     "name": "co",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: conscientiousness."
+    },
+    {
+     "name": "ex",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: extraversion."
+    },
+    {
+     "name": "ag",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: agreeableness."
+    },
+    {
+     "name": "ne",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Big Five: neuroticism."
+    },
+    {
+     "name": "recsys_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Recommender of the content feed."
+    },
+    {
+     "name": "language",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Language."
+    },
+    {
+     "name": "owner",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Account that owns a page."
+    },
+    {
+     "name": "education_level",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Education."
+    },
+    {
+     "name": "joined_on",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round of arrival."
+    },
+    {
+     "name": "frecsys_type",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Recommender of the follow suggestions."
+    },
+    {
+     "name": "round_actions",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "3",
+     "fk": null,
+     "desc": "Actions per round (legacy setting)."
+    },
+    {
+     "name": "gender",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Gender."
+    },
+    {
+     "name": "nationality",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Nationality."
+    },
+    {
+     "name": "toxicity",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Toxicity level of the persona."
+    },
+    {
+     "name": "is_page",
+     "type": "INTEGER",
+     "pk": false,
+     "null": false,
+     "default": "0",
+     "fk": null,
+     "desc": "1 for a page."
+    },
+    {
+     "name": "left_on",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Round of departure; empty while active."
+    },
+    {
+     "name": "daily_activity_level",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "1",
+     "fk": null,
+     "desc": "Level 1-5 that scales the hourly probability of acting."
+    },
+    {
+     "name": "profession",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Profession."
+    },
+    {
+     "name": "activity_profile",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Named profile of active hours."
+    },
+    {
+     "name": "archetype",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "broadcaster, explorer or validator."
+    },
+    {
+     "name": "bio",
+     "type": "TEXT",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Profile biography."
+    },
+    {
+     "name": "website",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Profile website."
+    },
+    {
+     "name": "profile_picture_url",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": true,
+     "default": "",
+     "fk": null,
+     "desc": "Profile picture."
+    },
+    {
+     "name": "cover_image",
+     "type": "VARCHAR(400)",
+     "pk": false,
+     "null": false,
+     "default": "",
+     "fk": null,
+     "desc": "Cover image."
+    },
+    {
+     "name": "is_private",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 when follows need approval."
+    },
+    {
+     "name": "is_verified",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 for a verified account."
+    },
+    {
+     "name": "last_active_day",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Last day with an action (used for inactivity churn)."
+    },
+    {
+     "name": "influence_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Network influence score."
+    },
+    {
+     "name": "broker_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Network brokerage score."
+    },
+    {
+     "name": "stress_level",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "0.0",
+     "fk": null,
+     "desc": "Current stress."
+    },
+    {
+     "name": "is_shadow_banned",
+     "type": "INTEGER",
+     "pk": false,
+     "null": true,
+     "default": "0",
+     "fk": null,
+     "desc": "1 when the moderation reduced the reach of the account."
+    },
+    {
+     "name": "satisfaction_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": true,
+     "default": "100.0",
+     "fk": null,
+     "desc": "Satisfaction that drives churn."
+    },
+    {
+     "name": "is_churned",
+     "type": "BOOLEAN",
+     "pk": false,
+     "null": true,
+     "default": "False",
+     "fk": null,
+     "desc": "1 once the account has left."
+    }
+   ],
+   "rules": [
+    "unique None: (username)"
+   ]
+  },
+  "user_opinions": {
+   "note": "Opinion of an account on a topic in a round (score and label), per model.",
+   "doc": "opinions",
+   "columns": [
+    {
+     "name": "id",
+     "type": "VARCHAR(36)",
+     "pk": true,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Primary key."
+    },
+    {
+     "name": "user_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "user_mgmt.id",
+     "desc": "Account concerned (user_mgmt.id)."
+    },
+    {
+     "name": "topic_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": "interests.iid",
+     "desc": "Topic concerned."
+    },
+    {
+     "name": "topic",
+     "type": "VARCHAR(128)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": null,
+     "desc": "Topic label."
+    },
+    {
+     "name": "round_id",
+     "type": "VARCHAR(36)",
+     "pk": false,
+     "null": false,
+     "default": null,
+     "fk": "rounds.id",
+     "desc": "Round in which it happened (rounds.id)."
+    },
+    {
+     "name": "opinion_score",
+     "type": "FLOAT",
+     "pk": false,
+     "null": false,
+     "default": "0.5",
+     "fk": null,
+     "desc": "Opinion in [0, 1]."
+    },
+    {
+     "name": "opinion_label",
+     "type": "VARCHAR(64)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Class of the opinion."
+    },
+    {
+     "name": "model_name",
+     "type": "VARCHAR(32)",
+     "pk": false,
+     "null": true,
+     "default": null,
+     "fk": null,
+     "desc": "Opinion model that wrote the row."
+    }
+   ],
+   "rules": [
+    "unique uq_user_topic_round_opinion: (user_id, topic, round_id)"
+   ]
+  }
+ }
+}
